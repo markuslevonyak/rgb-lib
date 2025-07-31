@@ -550,6 +550,73 @@ pub(crate) fn get_pending_blind_transfers(wallet: &mut Wallet) -> Vec<Transfer> 
         .collect()
 }
 
+#[cfg(any(feature = "electrum", feature = "esplora"))]
+pub(crate) fn extract_opouts_from_transfer(
+    wallet: &Wallet,
+    asset_id: &str,
+    txid: &str,
+) -> Vec<Opout> {
+    let batch_transfers = get_test_batch_transfers(wallet, txid);
+    assert_eq!(batch_transfers.len(), 1);
+    let batch_transfer = batch_transfers.first().unwrap();
+    let asset_transfers = get_test_asset_transfers(wallet, batch_transfer.idx);
+    let asset_transfers = asset_transfers
+        .iter()
+        .filter(|at| at.asset_id.as_ref() == Some(&asset_id.to_string()))
+        .filter(|t| t.user_driven)
+        .collect::<Vec<_>>();
+    assert_eq!(asset_transfers.len(), 1);
+    let asset_transfer = asset_transfers.first().unwrap();
+    let colorings: Vec<DbColoring> = wallet
+        .database
+        .iter_colorings()
+        .unwrap()
+        .into_iter()
+        .filter(|c| c.asset_transfer_idx == asset_transfer.idx)
+        .collect();
+    if colorings.is_empty() {
+        panic!("cannot find colorings for this transfer");
+    }
+    let txo_indices = colorings.iter().map(|c| c.txo_idx).collect::<Vec<_>>();
+    let db_txos = wallet.database.iter_txos().unwrap();
+    let relevant_txos = db_txos
+        .into_iter()
+        .filter(|t| txo_indices.contains(&t.idx))
+        .collect::<Vec<_>>();
+    let rgb_outpoints: Vec<RgbOutpoint> = relevant_txos
+        .iter()
+        .map(|txo| RgbOutpoint::from(txo.clone()))
+        .collect();
+    if rgb_outpoints.is_empty() {
+        panic!("cannot find outpoints for this transfer");
+    }
+    let contract_id = ContractId::from_str(asset_id).unwrap();
+    let runtime = wallet.rgb_runtime().unwrap();
+    let assignments = runtime
+        .contract_assignments_for(contract_id, rgb_outpoints)
+        .unwrap();
+    let mut opouts = Vec::new();
+    for (_explicit_seal, opout_state_map) in assignments {
+        for (opout, _state) in opout_state_map {
+            opouts.push(opout);
+        }
+    }
+    opouts
+}
+
+#[cfg(any(feature = "electrum", feature = "esplora"))]
+pub(crate) fn write_opouts_to_reject_list(filename: &str, opouts: &[String]) {
+    let lists_dir = PathBuf::from(join_with_sep(&LISTS_DIR_PARTS));
+    if !lists_dir.exists() {
+        fs::create_dir_all(&lists_dir).unwrap();
+    }
+    let file_path = lists_dir.join(filename);
+    let mut file = std::fs::File::create(&file_path).unwrap();
+    for opout in opouts {
+        writeln!(file, "{}", opout).unwrap()
+    }
+}
+
 /// print the provided message, then get colorings for each wallet unspent and print their status,
 /// type, amount and asset
 pub(crate) fn show_unspent_colorings(wallet: &mut Wallet, msg: &str) {

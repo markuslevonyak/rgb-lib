@@ -451,7 +451,7 @@ fn supported_schemas() {
     let result = test_issue_asset_cfa_result(&mut wallet_nia, &online_nia, Some(&[AMOUNT]), None);
     assert_matches!(result, Err(Error::UnsupportedSchema { asset_schema: _ }));
     let result =
-        test_issue_asset_ifa_result(&mut wallet_nia, &online_nia, Some(&[AMOUNT]), None, 0);
+        test_issue_asset_ifa_result(&mut wallet_nia, &online_nia, Some(&[AMOUNT]), None, 0, None);
     assert_matches!(result, Err(Error::UnsupportedSchema { asset_schema: _ }));
     let result = test_issue_asset_uda_result(&mut wallet_nia, &online_nia, None, None, vec![]);
     assert_matches!(result, Err(Error::UnsupportedSchema { asset_schema: _ }));

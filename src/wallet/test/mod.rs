@@ -1,5 +1,6 @@
 use std::{
     ffi::OsString,
+    io::Write,
     path::MAIN_SEPARATOR_STR,
     process::{Command, Stdio},
     sync::{Mutex, Once, RwLock},
@@ -50,6 +51,7 @@ const ELECTRUM_2_URL: &str = "127.0.0.1:50002";
 const ELECTRUM_BLOCKSTREAM_URL: &str = "127.0.0.1:50003";
 const ESPLORA_URL: &str = "http://127.0.0.1:8094/regtest/api";
 const TEST_DATA_DIR_PARTS: [&str; 2] = ["tests", "tmp"];
+const LISTS_DIR_PARTS: [&str; 2] = ["tests", "lists"];
 const TICKER: &str = "TICKER";
 const NAME: &str = "asset name";
 const DETAILS: &str = "details with ℧nicode characters";
@@ -218,6 +220,20 @@ pub fn skip_check_fee_rate() -> bool {
         false
     } else {
         println!("skipping check fee rate (mock)");
+        mock.pop().unwrap()
+    }
+}
+
+lazy_static! {
+    static ref MOCK_SKIP_BUILD_DAG: Mutex<Vec<bool>> = Mutex::new(vec![]);
+}
+
+pub fn skip_build_dag() -> bool {
+    let mut mock = MOCK_SKIP_BUILD_DAG.lock().unwrap();
+    if mock.is_empty() {
+        false
+    } else {
+        println!("skipping check dag (mock)");
         mock.pop().unwrap()
     }
 }

@@ -20,6 +20,7 @@ fn success() {
         Some(&[AMOUNT, AMOUNT]),
         Some(&[AMOUNT, AMOUNT, AMOUNT]),
         4,
+        None,
     );
     let bak_info_after = wallet.database.get_backup_info().unwrap().unwrap();
     assert!(bak_info_after.last_operation_timestamp > bak_info_before.last_operation_timestamp);
@@ -83,7 +84,7 @@ fn noissue_someinflation() {
 
     let (mut wallet, online) = get_funded_wallet!();
 
-    let asset = test_issue_asset_ifa(&mut wallet, &online, Some(&[]), Some(&[AMOUNT]), 0);
+    let asset = test_issue_asset_ifa(&mut wallet, &online, Some(&[]), Some(&[AMOUNT]), 0, None);
 
     // checks
     let balance = test_get_asset_balance(&wallet, &asset.asset_id);
@@ -132,7 +133,7 @@ fn multi_success() {
     // create more UTXOs
     let _ = test_create_utxos_default(&mut wallet, &online);
 
-    let asset = test_issue_asset_ifa(&mut wallet, &online, Some(&amounts), None, 0);
+    let asset = test_issue_asset_ifa(&mut wallet, &online, Some(&amounts), None, 0, None);
 
     // check balance is the sum of the amounts
     assert_eq!(asset.balance.settled, sum);
@@ -183,7 +184,7 @@ fn no_issue_on_pending_send() {
     assert_eq!(num_created, 3);
 
     // issue 1st asset
-    let asset_1 = test_issue_asset_ifa(&mut wallet, &online, None, None, 1);
+    let asset_1 = test_issue_asset_ifa(&mut wallet, &online, None, None, 1, None);
     show_unspent_colorings(&mut wallet, "after 1st issuance");
     // get 1st issuance UTXOs
     let unspents = test_list_unspents(&mut wallet, None, false);
@@ -264,14 +265,27 @@ fn no_issue_on_pending_send() {
     show_unspent_colorings(&mut wallet, "after send");
 
     // issuing a 2nd asset fails due to insufficient allocation slots (pending transfers)
-    let result =
-        test_issue_asset_ifa_result(&mut wallet, &online, Some(&[AMOUNT * 2]), Some(&[]), 0);
+    let result = test_issue_asset_ifa_result(
+        &mut wallet,
+        &online,
+        Some(&[AMOUNT * 2]),
+        Some(&[]),
+        0,
+        None,
+    );
     assert_matches!(result, Err(Error::InsufficientAllocationSlots));
 
     // create 1 more UTXO + issue 2nd asset
     let num_created = test_create_utxos(&mut wallet, &online, false, Some(1), None, FEE_RATE);
     assert_eq!(num_created, 1);
-    let asset_2 = test_issue_asset_ifa(&mut wallet, &online, Some(&[AMOUNT * 2]), Some(&[]), 0);
+    let asset_2 = test_issue_asset_ifa(
+        &mut wallet,
+        &online,
+        Some(&[AMOUNT * 2]),
+        Some(&[]),
+        0,
+        None,
+    );
     show_unspent_colorings(&mut wallet, "after 2nd issuance");
     // get 2nd issuance UTXO
     let unspents = test_list_unspents(&mut wallet, None, false);
@@ -295,7 +309,14 @@ fn no_issue_on_pending_send() {
     wait_for_refresh(&mut wallet, &online, Some(&asset_1.asset_id), None);
 
     // issue 3rd asset
-    let asset_3 = test_issue_asset_ifa(&mut wallet, &online, Some(&[AMOUNT * 3]), Some(&[]), 0);
+    let asset_3 = test_issue_asset_ifa(
+        &mut wallet,
+        &online,
+        Some(&[AMOUNT * 3]),
+        Some(&[]),
+        0,
+        None,
+    );
     show_unspent_colorings(&mut wallet, "after 3rd issuance");
     // get 3rd issuance UTXO
     let unspents = test_list_unspents(&mut wallet, None, false);
@@ -329,13 +350,26 @@ fn fail() {
     let (mut wallet, online) = get_funded_wallet!();
 
     // supply overflow
-    let result =
-        test_issue_asset_ifa_result(&mut wallet, &online, Some(&[u64::MAX, u64::MAX]), None, 0);
+    let result = test_issue_asset_ifa_result(
+        &mut wallet,
+        &online,
+        Some(&[u64::MAX, u64::MAX]),
+        None,
+        0,
+        None,
+    );
     assert!(matches!(result, Err(Error::TooHighIssuanceAmounts)));
 
     // invalid ticker: empty
-    let result =
-        wallet.issue_asset_ifa(s!(""), NAME.to_string(), PRECISION, vec![AMOUNT], vec![], 0);
+    let result = wallet.issue_asset_ifa(
+        s!(""),
+        NAME.to_string(),
+        PRECISION,
+        vec![AMOUNT],
+        vec![],
+        0,
+        None,
+    );
     assert!(matches!(result, Err(Error::InvalidTicker { details: m }) if m == EMPTY_MSG));
 
     // invalid ticker: too long
@@ -346,6 +380,7 @@ fn fail() {
         vec![AMOUNT],
         vec![],
         0,
+        None,
     );
     assert!(matches!(result, Err(Error::InvalidTicker { details: m }) if m == IDENT_TOO_LONG_MSG));
 
@@ -357,6 +392,7 @@ fn fail() {
         vec![AMOUNT],
         vec![],
         0,
+        None,
     );
     assert!(
         matches!(result, Err(Error::InvalidTicker { details: m }) if m == "ticker needs to be all uppercase")
@@ -371,6 +407,7 @@ fn fail() {
         vec![AMOUNT],
         vec![],
         0,
+        None,
     );
     assert!(
         matches!(result, Err(Error::InvalidTicker { details: m }) if m == IDENT_NOT_ASCII_MSG
@@ -386,6 +423,7 @@ fn fail() {
         vec![AMOUNT],
         vec![],
         0,
+        None,
     );
     assert!(
         matches!(result, Err(Error::InvalidTicker { details: m }) if m == IDENT_NOT_ASCII_MSG
@@ -401,6 +439,7 @@ fn fail() {
         vec![AMOUNT],
         vec![],
         0,
+        None,
     );
     assert!(
         matches!(result, Err(Error::InvalidTicker { details: m }) if m == IDENT_NOT_START_MSG
@@ -415,6 +454,7 @@ fn fail() {
         vec![AMOUNT],
         vec![],
         0,
+        None,
     );
     assert!(matches!(result, Err(Error::InvalidName { details: m }) if m == EMPTY_MSG));
 
@@ -426,6 +466,7 @@ fn fail() {
         vec![AMOUNT],
         vec![],
         0,
+        None,
     );
     assert!(matches!(result, Err(Error::InvalidName { details: m }) if m == IDENT_TOO_LONG_MSG));
 
@@ -438,6 +479,7 @@ fn fail() {
         vec![AMOUNT],
         vec![],
         0,
+        None,
     );
     assert!(
         matches!(result, Err(Error::InvalidName { details: m }) if m == IDENT_NOT_ASCII_MSG
@@ -452,6 +494,7 @@ fn fail() {
         vec![AMOUNT],
         vec![],
         0,
+        None,
     );
     assert!(matches!(
         result,
@@ -459,23 +502,29 @@ fn fail() {
     ));
 
     // invalid amount list (no issuance nor inflation amounts)
-    let result = test_issue_asset_ifa_result(&mut wallet, &online, Some(&[]), Some(&[]), 0);
+    let result = test_issue_asset_ifa_result(&mut wallet, &online, Some(&[]), Some(&[]), 0, None);
     assert!(matches!(result, Err(Error::NoIssuanceAmounts)));
 
     // invalid amount list (1+ issuance amounts == 0)
-    let result = test_issue_asset_ifa_result(&mut wallet, &online, Some(&[1, 0, 2]), None, 0);
+    let result = test_issue_asset_ifa_result(&mut wallet, &online, Some(&[1, 0, 2]), None, 0, None);
     assert!(matches!(result, Err(Error::InvalidAmountZero)));
 
     // invalid amount list (1+ inflation amounts == 0)
-    let result =
-        test_issue_asset_ifa_result(&mut wallet, &online, Some(&[AMOUNT]), Some(&[1, 0, 2]), 0);
+    let result = test_issue_asset_ifa_result(
+        &mut wallet,
+        &online,
+        Some(&[AMOUNT]),
+        Some(&[1, 0, 2]),
+        0,
+        None,
+    );
     assert!(matches!(result, Err(Error::InvalidAmountZero)));
 
     // new wallet
     let (mut wallet, online) = get_empty_wallet!();
 
     // insufficient funds
-    let result = test_issue_asset_ifa_result(&mut wallet, &online, None, None, 0);
+    let result = test_issue_asset_ifa_result(&mut wallet, &online, None, None, 0, None);
     assert!(matches!(
         result,
         Err(Error::InsufficientBitcoins {
@@ -488,6 +537,6 @@ fn fail() {
     mine(false, false);
 
     // insufficient allocations
-    let result = test_issue_asset_ifa_result(&mut wallet, &online, None, None, 0);
+    let result = test_issue_asset_ifa_result(&mut wallet, &online, None, None, 0, None);
     assert!(matches!(result, Err(Error::InsufficientAllocationSlots)));
 }

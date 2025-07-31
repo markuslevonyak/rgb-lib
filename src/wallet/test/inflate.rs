@@ -22,6 +22,7 @@ fn success() {
         Some(&issue_amounts),
         Some(&inflation_rights),
         0,
+        None,
     );
     let initial_supply = issue_amounts.iter().sum::<u64>();
     let max_supply = initial_supply + inflation_rights.iter().sum::<u64>();

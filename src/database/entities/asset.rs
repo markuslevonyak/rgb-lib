@@ -28,6 +28,7 @@ pub struct Model {
     pub timestamp: i64,
     pub max_supply: Option<String>,
     pub known_circulating_supply: Option<String>,
+    pub reject_list_url: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveColumn)]
@@ -45,6 +46,7 @@ pub enum Column {
     Timestamp,
     MaxSupply,
     KnownCirculatingSupply,
+    RejectListUrl,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DerivePrimaryKey)]
@@ -83,6 +85,7 @@ impl ColumnTrait for Column {
             Self::Timestamp => ColumnType::BigInteger.def(),
             Self::MaxSupply => ColumnType::String(StringLen::None).def().null(),
             Self::KnownCirculatingSupply => ColumnType::String(StringLen::None).def().null(),
+            Self::RejectListUrl => ColumnType::String(StringLen::None).def().null(),
         }
     }
 }

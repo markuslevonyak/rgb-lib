@@ -120,7 +120,7 @@ fn success() {
 
     // asset id is set (IFA)
     test_create_utxos_default(&mut wallet, &online); // more UTXOs to have free alocation slots
-    let asset_ifa = test_issue_asset_ifa(&mut wallet, &online, None, None, 0);
+    let asset_ifa = test_issue_asset_ifa(&mut wallet, &online, None, None, 0, None);
     let asset_ifa_id = asset_ifa.asset_id;
     let result = wallet.blind_receive(
         Some(asset_ifa_id.clone()),

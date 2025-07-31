@@ -40,6 +40,7 @@ if [ -z "${params}" ]; then
 fi
 
 TMP_DIR="${CWD}/tmp"
+LISTS_DIR="${CWD}/lists"
 COMPOSE_FPATH="${CWD}/compose.yaml"
 COMPOSE="$COMPOSE -f ${COMPOSE_FPATH}"
 EXPOSED_PORTS=(3000 50001)  # see compose.yaml for the exposed ports
@@ -102,8 +103,8 @@ stop_services() {
 _start_services() {
     stop_services
     if [ -n "$TESTS" ]; then
-        rm -rf $TMP_DIR
-        mkdir -p $TMP_DIR
+        rm -rf $TMP_DIR $LISTS_DIR
+        mkdir -p $TMP_DIR $LISTS_DIR
     fi
     for port in "${EXPOSED_PORTS[@]}"; do
         if [ -n "$(ss -HOlnt "sport = :$port")" ];then

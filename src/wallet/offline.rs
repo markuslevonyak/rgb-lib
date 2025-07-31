@@ -32,6 +32,7 @@ pub(crate) const RGB_STATE_ASSET_OWNER: &str = "assetOwner";
 pub(crate) const RGB_STATE_INFLATION_ALLOWANCE: &str = "inflationAllowance";
 pub(crate) const RGB_STATE_REPLACE_RIGHT: &str = "replaceRight";
 pub(crate) const RGB_GLOBAL_ISSUED_SUPPLY: &str = "issuedSupply";
+pub(crate) const RGB_GLOBAL_REJECT_LIST_URL: &str = "rejectListUrl";
 #[cfg(any(feature = "electrum", feature = "esplora"))]
 pub(crate) const RGB_METADATA_ALLOWED_INFLATION: &str = "allowedInflation";
 
@@ -54,6 +55,7 @@ pub(crate) struct LocalAssetData {
     pub(crate) initial_supply: u64,
     pub(crate) max_supply: Option<u64>,
     pub(crate) known_circulating_supply: Option<u64>,
+    pub(crate) reject_list_url: Option<String>,
 }
 
 /// The bitcoin balances (in sats) for the vanilla and colored wallets.
@@ -146,6 +148,8 @@ pub struct Metadata {
     pub details: Option<String>,
     /// Asset unique token
     pub token: Option<Token>,
+    /// Reject list URL
+    pub reject_list_url: Option<String>,
 }
 
 /// A Non-Inflatable Asset.
@@ -479,6 +483,8 @@ pub struct AssetIFA {
     pub balance: Balance,
     /// Asset media attachment
     pub media: Option<Media>,
+    /// Reject list URL
+    pub reject_list_url: Option<String>,
 }
 
 impl AssetIFA {
@@ -532,6 +538,7 @@ impl AssetIFA {
             added_at: asset.added_at,
             balance,
             media,
+            reject_list_url: asset.reject_list_url.clone(),
         })
     }
 }
@@ -1369,7 +1376,7 @@ impl Wallet {
         block_on(Migrator::up(&connection, None)).map_err(InternalError::from)?;
         let database = RgbLibDatabase::new(connection);
         #[cfg(any(feature = "electrum", feature = "esplora"))]
-        let rest_client = get_proxy_client()?;
+        let rest_client = get_rest_client()?;
 
         info!(logger, "New wallet completed");
         Ok(Wallet {
@@ -1632,6 +1639,12 @@ impl Wallet {
         })
     }
 
+    fn _check_reject_list_url(&self, opid_reject_url: String) -> Result<RejectListUrl, Error> {
+        RejectListUrl::try_from(opid_reject_url).map_err(|e| Error::InvalidRejectListUrl {
+            details: e.to_string(),
+        })
+    }
+
     fn _check_ticker(&self, ticker: String) -> Result<Ticker, Error> {
         if ticker.to_ascii_uppercase() != *ticker {
             return Err(Error::InvalidTicker {
@@ -1866,6 +1879,7 @@ impl Wallet {
             initial_supply: settled,
             max_supply: None,
             known_circulating_supply: None,
+            reject_list_url: None,
         };
         let asset = self.add_asset_to_db(
             asset_id.clone(),
@@ -2076,6 +2090,7 @@ impl Wallet {
             initial_supply: 1,
             max_supply: None,
             known_circulating_supply: None,
+            reject_list_url: None,
         };
         let asset = self.add_asset_to_db(
             asset_id.clone(),
@@ -2265,6 +2280,7 @@ impl Wallet {
             initial_supply: settled,
             max_supply: None,
             known_circulating_supply: None,
+            reject_list_url: None,
         };
         let asset = self.add_asset_to_db(
             asset_id.clone(),
@@ -2335,6 +2351,7 @@ impl Wallet {
         amounts: Vec<u64>,
         inflation_amounts: Vec<u64>,
         replace_rights_num: u8,
+        reject_list_url: Option<String>,
     ) -> Result<AssetIFA, Error> {
         info!(
             self.logger,
@@ -2403,6 +2420,14 @@ impl Wallet {
         .expect("invalid issuedSupply")
         .add_global_state("maxSupply", Amount::from(max_supply))
         .expect("invalid maxSupply");
+        if let Some(reject_list_url) = &reject_list_url {
+            builder = builder
+                .add_global_state(
+                    RGB_GLOBAL_REJECT_LIST_URL,
+                    self._check_reject_list_url(reject_list_url.clone())?,
+                )
+                .expect("invalid rejectListUrl");
+        }
 
         let mut issue_utxos: HashMap<DbTxo, u64> = HashMap::new();
         let mut exclude_outpoints: Vec<Outpoint> = vec![];
@@ -2464,6 +2489,7 @@ impl Wallet {
             initial_supply: settled,
             max_supply: Some(max_supply),
             known_circulating_supply: Some(settled),
+            reject_list_url,
         };
         let asset = self.add_asset_to_db(
             asset_id.clone(),
@@ -3075,6 +3101,7 @@ impl Wallet {
             ticker: asset.ticker,
             details: asset.details,
             token,
+            reject_list_url: asset.reject_list_url,
         })
     }
 
@@ -3133,6 +3160,7 @@ impl Wallet {
             precision: ActiveValue::Set(asset_data.precision),
             ticker: ActiveValue::Set(asset_data.ticker),
             timestamp: ActiveValue::Set(timestamp),
+            reject_list_url: ActiveValue::Set(asset_data.reject_list_url),
         };
         let idx = self.database.set_asset(db_asset.clone())?;
         db_asset.idx = ActiveValue::Set(idx);

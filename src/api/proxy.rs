@@ -118,7 +118,10 @@ impl Proxy for RestClient {
             .post(url)
             .header(CONTENT_TYPE, JSON)
             .json(&body)
-            .send()?
+            .send()
+            .map_err(|e| Error::Proxy {
+                details: e.to_string(),
+            })?
             .json::<JsonRpcResponse<ServerInfoResponse>>()
             .map_err(InternalError::from)?)
     }
@@ -134,7 +137,10 @@ impl Proxy for RestClient {
             .post(url)
             .header(CONTENT_TYPE, JSON)
             .json(&body)
-            .send()?
+            .send()
+            .map_err(|e| Error::Proxy {
+                details: e.to_string(),
+            })?
             .json::<JsonRpcResponse<bool>>()
             .map_err(InternalError::from)?)
     }
@@ -154,7 +160,10 @@ impl Proxy for RestClient {
             .post(url)
             .header(CONTENT_TYPE, JSON)
             .json(&body)
-            .send()?
+            .send()
+            .map_err(|e| Error::Proxy {
+                details: e.to_string(),
+            })?
             .json::<JsonRpcResponse<GetConsignmentResponse>>()
             .map_err(InternalError::from)?)
     }
@@ -170,7 +179,10 @@ impl Proxy for RestClient {
             .post(url)
             .header(CONTENT_TYPE, JSON)
             .json(&body)
-            .send()?
+            .send()
+            .map_err(|e| Error::Proxy {
+                details: e.to_string(),
+            })?
             .json::<JsonRpcResponse<String>>()
             .map_err(InternalError::from)?)
     }
@@ -191,7 +203,10 @@ impl Proxy for RestClient {
             .post(url)
             .header(CONTENT_TYPE, JSON)
             .json(&body)
-            .send()?
+            .send()
+            .map_err(|e| Error::Proxy {
+                details: e.to_string(),
+            })?
             .json::<JsonRpcResponse<bool>>()
             .map_err(InternalError::from)?)
     }
@@ -224,7 +239,10 @@ impl Proxy for RestClient {
         Ok(self
             .post(url)
             .multipart(form)
-            .send()?
+            .send()
+            .map_err(|e| Error::Proxy {
+                details: e.to_string(),
+            })?
             .json::<JsonRpcResponse<bool>>()
             .map_err(InternalError::from)?)
     }
@@ -248,7 +266,10 @@ impl Proxy for RestClient {
         Ok(self
             .post(url)
             .multipart(form)
-            .send()?
+            .send()
+            .map_err(|e| Error::Proxy {
+                details: e.to_string(),
+            })?
             .json::<JsonRpcResponse<bool>>()
             .map_err(InternalError::from)?)
     }

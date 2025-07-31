@@ -198,6 +198,7 @@ pub extern "C" fn rgblib_issue_asset_ifa(
     amounts: *const c_char,
     inflation_amounts: *const c_char,
     replace_rights_num: *const c_char,
+    reject_list_url_opt: *const c_char,
 ) -> CResultString {
     issue_asset_ifa(
         wallet,
@@ -207,6 +208,7 @@ pub extern "C" fn rgblib_issue_asset_ifa(
         amounts,
         inflation_amounts,
         replace_rights_num,
+        reject_list_url_opt,
     )
     .into()
 }

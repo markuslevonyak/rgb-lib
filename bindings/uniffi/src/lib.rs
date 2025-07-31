@@ -613,6 +613,7 @@ impl Wallet {
         amounts: Vec<u64>,
         inflation_amounts: Vec<u64>,
         replace_rights_num: u8,
+        reject_list_url: Option<String>,
     ) -> Result<AssetIFA, RgbLibError> {
         self._get_wallet().issue_asset_ifa(
             ticker,
@@ -621,6 +622,7 @@ impl Wallet {
             amounts,
             inflation_amounts,
             replace_rights_num,
+            reject_list_url,
         )
     }
 

@@ -332,6 +332,7 @@ pub(crate) fn issue_asset_cfa(
     Ok(serde_json::to_string(&res)?)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn issue_asset_ifa(
     wallet: &COpaqueStruct,
     ticker: *const c_char,
@@ -340,12 +341,14 @@ pub(crate) fn issue_asset_ifa(
     amounts: *const c_char,
     inflation_amounts: *const c_char,
     replace_rights_num: *const c_char,
+    reject_list_url_opt: *const c_char,
 ) -> Result<String, Error> {
     let wallet = Wallet::from_opaque(wallet)?;
     let precision = ptr_to_num(precision)?;
     let amounts = convert_strings_array(amounts)?;
     let inflation_amounts = convert_strings_array(inflation_amounts)?;
     let replace_rights_num = ptr_to_num(replace_rights_num)?;
+    let reject_list_url = convert_optional_string(reject_list_url_opt);
     let res = wallet.issue_asset_ifa(
         ptr_to_string(ticker),
         ptr_to_string(name),
@@ -353,6 +356,7 @@ pub(crate) fn issue_asset_ifa(
         amounts,
         inflation_amounts,
         replace_rights_num,
+        reject_list_url,
     )?;
     Ok(serde_json::to_string(&res)?)
 }

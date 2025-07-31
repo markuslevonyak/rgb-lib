@@ -3,5 +3,6 @@
 **/rgblib.h*
 **/target
 **/tests/tmp
+**/tests/lists
 /.vim
 /.vscode

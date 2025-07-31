@@ -190,8 +190,8 @@ use rgbstd::{
     persistence::{MemContract, MemContractState, StashReadProvider, Stock, fs::FsBinStore},
     stl::{
         AssetSpec, Attachment, ContractTerms, Details, EmbeddedMedia as RgbEmbeddedMedia,
-        MediaType, Name, ProofOfReserves as RgbProofOfReserves, RicardianContract, Ticker,
-        TokenData,
+        MediaType, Name, ProofOfReserves as RgbProofOfReserves, RejectListUrl, RicardianContract,
+        Ticker, TokenData,
     },
     validation::{
         ResolveWitness, Scripts, Status, WitnessOrdProvider, WitnessResolverError, WitnessStatus,
@@ -199,11 +199,12 @@ use rgbstd::{
 };
 #[cfg(any(feature = "electrum", feature = "esplora"))]
 use rgbstd::{
-    Assign,
+    Assign, KnownTransition,
     containers::Consignment,
     contract::SchemaWrapper,
+    daggy::Walker,
     indexers::AnyResolver,
-    validation::{ValidationConfig, ValidationError, Validity, Warning},
+    validation::{OpoutsDagData, ValidationConfig, ValidationError, Validity, Warning},
 };
 #[cfg(any(feature = "electrum", feature = "esplora"))]
 use schemata::{
@@ -243,18 +244,19 @@ use crate::utils::INDEXER_PARALLEL_REQUESTS;
 #[cfg(test)]
 use crate::wallet::test::{mock_asset_terms, mock_contract_details, mock_token_data};
 #[cfg(test)]
-use crate::wallet::test::{mock_chain_net, skip_check_fee_rate};
+use crate::wallet::test::{mock_chain_net, skip_build_dag, skip_check_fee_rate};
 #[cfg(any(feature = "electrum", feature = "esplora"))]
 #[cfg(test)]
 use crate::wallet::test::{mock_input_unspents, mock_vout};
 #[cfg(any(feature = "electrum", feature = "esplora"))]
 use crate::{
     api::proxy::{GetConsignmentResponse, Proxy},
+    api::reject_list::RejectList,
     database::{DbData, LocalRecipient, LocalRecipientData, LocalWitnessData},
     error::IndexerError,
     utils::{
         INDEXER_RETRIES, INDEXER_STOP_GAP, INDEXER_TIMEOUT, OffchainResolver, check_proxy,
-        get_indexer, get_proxy_client, script_buf_from_recipient_id,
+        get_indexer, get_rest_client, script_buf_from_recipient_id,
     },
     wallet::{AssignmentsCollection, Indexer},
 };

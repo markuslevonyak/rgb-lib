@@ -5884,7 +5884,7 @@ fn skip_sync() {
 #[cfg(feature = "electrum")]
 #[test]
 #[parallel]
-fn ifa() {
+fn ifa_success() {
     initialize();
 
     let amount_fungible: u64 = 66;
@@ -5895,7 +5895,7 @@ fn ifa() {
     let (mut rcv_wallet, rcv_online) = get_funded_wallet!();
 
     // issue
-    let asset = test_issue_asset_ifa(&mut wallet, &online, None, None, 1);
+    let asset = test_issue_asset_ifa(&mut wallet, &online, None, None, 1, None);
     show_unspent_colorings(&mut wallet, "after issuance");
     let transfers = test_list_transfers(&wallet, Some(&asset.asset_id));
     assert_eq!(transfers.len(), 1);
@@ -6061,6 +6061,490 @@ fn ifa() {
         .map(|a| a.assignment.inflation_amount())
         .sum::<u64>();
     assert_eq!(inflation_right_amount, 0);
+}
+
+#[cfg(feature = "electrum")]
+#[test]
+#[parallel]
+fn ifa_reject_list() {
+    initialize();
+
+    println!("\n=== SCENARIO 1: spending opout in rejectlist - send FAILS then WORKS");
+    test_reject_list_scenario_1();
+
+    println!(
+        "\n=== SCENARIO 2: spending opout with ancestor in rejectlist - send FAILS then WORKS"
+    );
+    test_reject_list_scenario_2();
+
+    println!("\n=== SCENARIO 3: spending opout in rejectlist but also in allowlist - WORKS");
+    test_reject_list_scenario_3();
+
+    println!(
+        "\n=== SCENARIO 4: old ancestor in rejectlist but recent ancestor in allowlist - WORKS"
+    );
+    test_reject_list_scenario_4();
+
+    println!("\n=== SCENARIO 5: rejected opout in DAG but not in ancestry chain - WORKS");
+    test_reject_list_scenario_5();
+}
+
+#[cfg(feature = "electrum")]
+fn test_reject_list_scenario_1() {
+    let (mut wallet_1, online_1) = get_funded_wallet!();
+    let (mut wallet_2, online_2) = get_funded_wallet!();
+    let (mut wallet_3, online_3) = get_funded_wallet!();
+
+    let list_name = "reject1.list";
+
+    write_opouts_to_reject_list(list_name, &[]);
+    let asset = test_issue_asset_ifa(
+        &mut wallet_1,
+        &online_1,
+        Some(&[100, 100]),
+        Some(&[50]),
+        1,
+        Some(format!("http://localhost:8140/lists/{list_name}")),
+    );
+
+    let receive_data = test_blind_receive(&wallet_2);
+    let amt = 60;
+    let recipient_map_1 = HashMap::from([(
+        asset.asset_id.clone(),
+        vec![Recipient {
+            assignment: Assignment::Fungible(amt),
+            recipient_id: receive_data.recipient_id.clone(),
+            witness_data: None,
+            transport_endpoints: TRANSPORT_ENDPOINTS.clone(),
+        }],
+    )]);
+    let txid = test_send(&mut wallet_1, &online_1, &recipient_map_1);
+    wait_for_refresh(&mut wallet_2, &online_2, None, None);
+    wait_for_refresh(&mut wallet_1, &online_1, None, None);
+    mine(false, false);
+    wait_for_refresh(&mut wallet_2, &online_2, None, None);
+    wait_for_refresh(&mut wallet_1, &online_1, None, None);
+
+    // add to the reject list the newly received allocation
+    let opouts = extract_opouts_from_transfer(&wallet_2, &asset.asset_id, &txid);
+    assert_eq!(opouts.len(), 1);
+    write_opouts_to_reject_list(list_name, &[opouts[0].to_string()]);
+
+    // fail to send from the rejected allocation
+    let receive_data = test_blind_receive(&wallet_3);
+    let mut recipient_map_2 = HashMap::from([(
+        asset.asset_id.clone(),
+        vec![Recipient {
+            assignment: Assignment::Fungible(50),
+            recipient_id: receive_data.recipient_id.clone(),
+            witness_data: None,
+            transport_endpoints: TRANSPORT_ENDPOINTS.clone(),
+        }],
+    )]);
+    let result = test_send_result(&mut wallet_2, &online_2, &recipient_map_2);
+    assert_matches!(
+        result,
+        Err(Error::InsufficientAssignments { asset_id: ref t, .. }) if t == &asset.asset_id
+    );
+
+    // skip build dag check to see that receiver would refuse
+    *MOCK_SKIP_BUILD_DAG.lock().unwrap() = vec![true];
+    let _txid = test_send(&mut wallet_2, &online_2, &recipient_map_2);
+    test_refresh_all(&mut wallet_3, &online_3);
+    assert!(check_test_transfer_status_recipient(
+        &wallet_3,
+        &receive_data.recipient_id,
+        TransferStatus::Failed
+    ));
+
+    // send more assets
+    let receive_data = test_blind_receive(&wallet_2);
+    let recipient_map_3 = HashMap::from([(
+        asset.asset_id.clone(),
+        vec![Recipient {
+            assignment: Assignment::Fungible(amt + 1),
+            recipient_id: receive_data.recipient_id.clone(),
+            witness_data: None,
+            transport_endpoints: TRANSPORT_ENDPOINTS.clone(),
+        }],
+    )]);
+    let _txid = test_send(&mut wallet_1, &online_1, &recipient_map_3);
+    wait_for_refresh(&mut wallet_2, &online_2, None, None);
+    wait_for_refresh(&mut wallet_1, &online_1, None, None);
+    mine(false, false);
+    wait_for_refresh(&mut wallet_2, &online_2, None, None);
+    wait_for_refresh(&mut wallet_1, &online_1, None, None);
+
+    // now the previously failed send works since enough allowed allocations
+    let receive_data = test_blind_receive(&wallet_3); // avoid RecipientIDAlreadyUsed
+    recipient_map_2
+        .entry(asset.asset_id)
+        .and_modify(|r| r[0].recipient_id = receive_data.recipient_id.clone());
+    let _txid = test_send(&mut wallet_2, &online_2, &recipient_map_2);
+    wait_for_refresh(&mut wallet_3, &online_3, None, None);
+    wait_for_refresh(&mut wallet_2, &online_2, None, None);
+    mine(false, false);
+    wait_for_refresh(&mut wallet_2, &online_2, None, None);
+    wait_for_refresh(&mut wallet_3, &online_3, None, None);
+}
+
+#[cfg(feature = "electrum")]
+fn test_reject_list_scenario_2() {
+    let (mut wallet_1, online_1) = get_funded_wallet!();
+    let (mut wallet_2, online_2) = get_funded_wallet!();
+    let (mut wallet_3, online_3) = get_funded_wallet!();
+    let (mut wallet_4, online_4) = get_funded_wallet!();
+
+    let list_name = "reject2.list";
+
+    write_opouts_to_reject_list(list_name, &[]);
+    let asset = test_issue_asset_ifa(
+        &mut wallet_1,
+        &online_1,
+        Some(&[200]),
+        Some(&[50]),
+        1,
+        Some(format!("http://localhost:8140/lists/{list_name}")),
+    );
+
+    let receive_data = test_blind_receive(&wallet_2);
+    let recipient_map_1 = HashMap::from([(
+        asset.asset_id.clone(),
+        vec![Recipient {
+            assignment: Assignment::Fungible(70),
+            recipient_id: receive_data.recipient_id.clone(),
+            witness_data: None,
+            transport_endpoints: TRANSPORT_ENDPOINTS.clone(),
+        }],
+    )]);
+    let txid = test_send(&mut wallet_1, &online_1, &recipient_map_1);
+    wait_for_refresh(&mut wallet_2, &online_2, None, None);
+    wait_for_refresh(&mut wallet_1, &online_1, None, None);
+    mine(false, false);
+    wait_for_refresh(&mut wallet_2, &online_2, None, None);
+    wait_for_refresh(&mut wallet_1, &online_1, None, None);
+
+    let receive_data = test_blind_receive(&wallet_3);
+    let amt = 60;
+    let recipient_map_2 = HashMap::from([(
+        asset.asset_id.clone(),
+        vec![Recipient {
+            assignment: Assignment::Fungible(amt),
+            recipient_id: receive_data.recipient_id.clone(),
+            witness_data: None,
+            transport_endpoints: TRANSPORT_ENDPOINTS.clone(),
+        }],
+    )]);
+    let _txid = test_send(&mut wallet_2, &online_2, &recipient_map_2);
+    wait_for_refresh(&mut wallet_3, &online_3, None, None);
+    wait_for_refresh(&mut wallet_2, &online_2, None, None);
+    mine(false, false);
+    wait_for_refresh(&mut wallet_3, &online_3, None, None);
+    wait_for_refresh(&mut wallet_2, &online_2, None, None);
+
+    // add to the reject list the opout from the first transfer (ancestor of the 2nd)
+    let opouts = extract_opouts_from_transfer(&wallet_2, &asset.asset_id, &txid);
+    assert_eq!(opouts.len(), 1);
+    write_opouts_to_reject_list(list_name, &[opouts[0].to_string()]);
+
+    // fail to send from the allocation with a rejected ancestor
+    let receive_data = test_blind_receive(&wallet_4);
+    let mut recipient_map_3 = HashMap::from([(
+        asset.asset_id.clone(),
+        vec![Recipient {
+            assignment: Assignment::Fungible(50),
+            recipient_id: receive_data.recipient_id.clone(),
+            witness_data: None,
+            transport_endpoints: TRANSPORT_ENDPOINTS.clone(),
+        }],
+    )]);
+    let result = test_send_result(&mut wallet_3, &online_3, &recipient_map_3);
+    assert_matches!(
+        result,
+        Err(Error::InsufficientAssignments { asset_id: ref t, .. }) if t == &asset.asset_id
+    );
+
+    // skip build dag check to see that receiver would refuse
+    *MOCK_SKIP_BUILD_DAG.lock().unwrap() = vec![true];
+    let _txid = test_send(&mut wallet_3, &online_3, &recipient_map_3);
+    test_refresh_all(&mut wallet_4, &online_4);
+    assert!(check_test_transfer_status_recipient(
+        &wallet_4,
+        &receive_data.recipient_id,
+        TransferStatus::Failed
+    ));
+
+    // send more assets
+    let receive_data = test_blind_receive(&wallet_3);
+    let recipient_map_4 = HashMap::from([(
+        asset.asset_id.clone(),
+        vec![Recipient {
+            assignment: Assignment::Fungible(amt + 1),
+            recipient_id: receive_data.recipient_id.clone(),
+            witness_data: None,
+            transport_endpoints: TRANSPORT_ENDPOINTS.clone(),
+        }],
+    )]);
+    let _txid = test_send(&mut wallet_1, &online_1, &recipient_map_4);
+    wait_for_refresh(&mut wallet_3, &online_3, None, None);
+    wait_for_refresh(&mut wallet_1, &online_1, None, None);
+    mine(false, false);
+    wait_for_refresh(&mut wallet_3, &online_3, None, None);
+    wait_for_refresh(&mut wallet_1, &online_1, None, None);
+
+    // now the previously failed send works since enough allowed allocations
+    let receive_data = test_blind_receive(&wallet_4); // avoid RecipientIDAlreadyUsed
+    recipient_map_3
+        .entry(asset.asset_id)
+        .and_modify(|r| r[0].recipient_id = receive_data.recipient_id.clone());
+    let _txid = test_send(&mut wallet_3, &online_3, &recipient_map_3);
+    wait_for_refresh(&mut wallet_4, &online_4, None, None);
+    wait_for_refresh(&mut wallet_3, &online_3, None, None);
+    mine(false, false);
+    wait_for_refresh(&mut wallet_4, &online_4, None, None);
+    wait_for_refresh(&mut wallet_3, &online_3, None, None);
+}
+
+#[cfg(feature = "electrum")]
+fn test_reject_list_scenario_3() {
+    let (mut wallet_1, online_1) = get_funded_wallet!();
+    let (mut wallet_2, online_2) = get_funded_wallet!();
+    let (mut wallet_3, online_3) = get_funded_wallet!();
+
+    let list_name = "reject3.list";
+
+    write_opouts_to_reject_list(list_name, &[]);
+    let asset = test_issue_asset_ifa(
+        &mut wallet_1,
+        &online_1,
+        Some(&[100]),
+        Some(&[50]),
+        1,
+        Some(format!("http://localhost:8140/lists/{list_name}")),
+    );
+
+    let receive_data = test_blind_receive(&wallet_2);
+    let amt = 60;
+    let recipient_map_1 = HashMap::from([(
+        asset.asset_id.clone(),
+        vec![Recipient {
+            assignment: Assignment::Fungible(amt),
+            recipient_id: receive_data.recipient_id.clone(),
+            witness_data: None,
+            transport_endpoints: TRANSPORT_ENDPOINTS.clone(),
+        }],
+    )]);
+    let txid = test_send(&mut wallet_1, &online_1, &recipient_map_1);
+    wait_for_refresh(&mut wallet_2, &online_2, None, None);
+    wait_for_refresh(&mut wallet_1, &online_1, None, None);
+    mine(false, false);
+    wait_for_refresh(&mut wallet_2, &online_2, None, None);
+    wait_for_refresh(&mut wallet_1, &online_1, None, None);
+
+    // add to the reject list the newly received allocation
+    // both in rejected and allowed mode
+    let opouts = extract_opouts_from_transfer(&wallet_2, &asset.asset_id, &txid);
+    assert_eq!(opouts.len(), 1);
+    let opout_str = opouts[0].to_string();
+    write_opouts_to_reject_list(list_name, &[opout_str.clone(), format!("!{opout_str}")]);
+
+    // send the newly received allocation (succeeds because the opout has been allowed)
+    let receive_data = test_blind_receive(&wallet_3);
+    let recipient_map_2 = HashMap::from([(
+        asset.asset_id.clone(),
+        vec![Recipient {
+            assignment: Assignment::Fungible(50),
+            recipient_id: receive_data.recipient_id.clone(),
+            witness_data: None,
+            transport_endpoints: TRANSPORT_ENDPOINTS.clone(),
+        }],
+    )]);
+    let _txid = test_send(&mut wallet_2, &online_2, &recipient_map_2);
+    wait_for_refresh(&mut wallet_3, &online_3, None, None);
+    wait_for_refresh(&mut wallet_2, &online_2, None, None);
+    mine(false, false);
+    wait_for_refresh(&mut wallet_2, &online_2, None, None);
+    wait_for_refresh(&mut wallet_3, &online_3, None, None);
+}
+
+#[cfg(feature = "electrum")]
+fn test_reject_list_scenario_4() {
+    let (mut wallet_1, online_1) = get_funded_wallet!();
+    let (mut wallet_2, online_2) = get_funded_wallet!();
+    let (mut wallet_3, online_3) = get_funded_wallet!();
+    let (mut wallet_4, online_4) = get_funded_wallet!();
+    let (mut wallet_5, online_5) = get_funded_wallet!();
+
+    let list_name = "reject4.list";
+
+    write_opouts_to_reject_list(list_name, &[]);
+    let asset = test_issue_asset_ifa(
+        &mut wallet_1,
+        &online_1,
+        Some(&[100]),
+        Some(&[50]),
+        1,
+        Some(format!("http://localhost:8140/lists/{list_name}")),
+    );
+
+    let receive_data = test_blind_receive(&wallet_2);
+    let recipient_map_1 = HashMap::from([(
+        asset.asset_id.clone(),
+        vec![Recipient {
+            assignment: Assignment::Fungible(80),
+            recipient_id: receive_data.recipient_id.clone(),
+            witness_data: None,
+            transport_endpoints: TRANSPORT_ENDPOINTS.clone(),
+        }],
+    )]);
+    let txid_1 = test_send(&mut wallet_1, &online_1, &recipient_map_1);
+    wait_for_refresh(&mut wallet_2, &online_2, None, None);
+    wait_for_refresh(&mut wallet_1, &online_1, None, None);
+    mine(false, false);
+    wait_for_refresh(&mut wallet_2, &online_2, None, None);
+    wait_for_refresh(&mut wallet_1, &online_1, None, None);
+
+    let receive_data = test_blind_receive(&wallet_3);
+    let recipient_map_2 = HashMap::from([(
+        asset.asset_id.clone(),
+        vec![Recipient {
+            assignment: Assignment::Fungible(70),
+            recipient_id: receive_data.recipient_id.clone(),
+            witness_data: None,
+            transport_endpoints: TRANSPORT_ENDPOINTS.clone(),
+        }],
+    )]);
+    let txid_2 = test_send(&mut wallet_2, &online_2, &recipient_map_2);
+    wait_for_refresh(&mut wallet_3, &online_3, None, None);
+    wait_for_refresh(&mut wallet_2, &online_2, None, None);
+    mine(false, false);
+    wait_for_refresh(&mut wallet_3, &online_3, None, None);
+    wait_for_refresh(&mut wallet_2, &online_2, None, None);
+
+    let receive_data = test_blind_receive(&wallet_4);
+    let recipient_map_3 = HashMap::from([(
+        asset.asset_id.clone(),
+        vec![Recipient {
+            assignment: Assignment::Fungible(65),
+            recipient_id: receive_data.recipient_id.clone(),
+            witness_data: None,
+            transport_endpoints: TRANSPORT_ENDPOINTS.clone(),
+        }],
+    )]);
+    let _txid = test_send(&mut wallet_3, &online_3, &recipient_map_3);
+    wait_for_refresh(&mut wallet_4, &online_4, None, None);
+    wait_for_refresh(&mut wallet_3, &online_3, None, None);
+    mine(false, false);
+    wait_for_refresh(&mut wallet_4, &online_4, None, None);
+    wait_for_refresh(&mut wallet_3, &online_3, None, None);
+
+    // add to the reject list the opout from first the first transfer and
+    // allow the one from the second transfer (child of the first one)
+    let opouts_1 = extract_opouts_from_transfer(&wallet_2, &asset.asset_id, &txid_1);
+    assert_eq!(opouts_1.len(), 1);
+    let opouts_2 = extract_opouts_from_transfer(&wallet_3, &asset.asset_id, &txid_2);
+    assert_eq!(opouts_2.len(), 1);
+    write_opouts_to_reject_list(
+        list_name,
+        &[opouts_1[0].to_string(), format!("!{}", opouts_2[0])],
+    );
+
+    // send the newly received allocation (succeeds because the more recent ancestor is allowed)
+    let receive_data = test_blind_receive(&wallet_5);
+    let recipient_map_3 = HashMap::from([(
+        asset.asset_id.clone(),
+        vec![Recipient {
+            assignment: Assignment::Fungible(50),
+            recipient_id: receive_data.recipient_id.clone(),
+            witness_data: None,
+            transport_endpoints: TRANSPORT_ENDPOINTS.clone(),
+        }],
+    )]);
+    let _txid = test_send(&mut wallet_4, &online_4, &recipient_map_3);
+    wait_for_refresh(&mut wallet_5, &online_5, None, None);
+    wait_for_refresh(&mut wallet_4, &online_4, None, None);
+    mine(false, false);
+    wait_for_refresh(&mut wallet_4, &online_4, None, None);
+    wait_for_refresh(&mut wallet_5, &online_5, None, None);
+}
+
+#[cfg(feature = "electrum")]
+fn test_reject_list_scenario_5() {
+    let (mut wallet_1, online_1) = get_funded_wallet!();
+    let (mut wallet_2, online_2) = get_funded_wallet!();
+    let (mut wallet_3, online_3) = get_funded_wallet!();
+    let (mut wallet_4, online_4) = get_funded_wallet!();
+
+    let list_name = "reject5.list";
+
+    write_opouts_to_reject_list(list_name, &[]);
+    let asset = test_issue_asset_ifa(
+        &mut wallet_1,
+        &online_1,
+        Some(&[150]),
+        Some(&[100]),
+        1,
+        Some(format!("http://localhost:8140/lists/{list_name}")),
+    );
+
+    let receive_data = test_blind_receive(&wallet_2);
+    let recipient_map_1 = HashMap::from([(
+        asset.asset_id.clone(),
+        vec![Recipient {
+            assignment: Assignment::Fungible(60),
+            recipient_id: receive_data.recipient_id.clone(),
+            witness_data: None,
+            transport_endpoints: TRANSPORT_ENDPOINTS.clone(),
+        }],
+    )]);
+    let txid = test_send(&mut wallet_1, &online_1, &recipient_map_1);
+    wait_for_refresh(&mut wallet_2, &online_2, None, None);
+    wait_for_refresh(&mut wallet_1, &online_1, None, None);
+    mine(false, false);
+    wait_for_refresh(&mut wallet_2, &online_2, None, None);
+    wait_for_refresh(&mut wallet_1, &online_1, None, None);
+
+    let receive_data = test_blind_receive(&wallet_3);
+    let recipient_map_2 = HashMap::from([(
+        asset.asset_id.clone(),
+        vec![Recipient {
+            assignment: Assignment::Fungible(70),
+            recipient_id: receive_data.recipient_id.clone(),
+            witness_data: None,
+            transport_endpoints: TRANSPORT_ENDPOINTS.clone(),
+        }],
+    )]);
+    let _txid = test_send(&mut wallet_1, &online_1, &recipient_map_2);
+    wait_for_refresh(&mut wallet_3, &online_3, None, None);
+    wait_for_refresh(&mut wallet_1, &online_1, None, None);
+    mine(false, false);
+    wait_for_refresh(&mut wallet_3, &online_3, None, None);
+    wait_for_refresh(&mut wallet_1, &online_1, None, None);
+
+    // add to the reject list the allocation of the first transfer (sibling of the one we are about
+    // to spend)
+    let opouts = extract_opouts_from_transfer(&wallet_2, &asset.asset_id, &txid);
+    assert_eq!(opouts.len(), 1);
+    write_opouts_to_reject_list(list_name, &[opouts[0].to_string()]);
+
+    // send the newly received allocation (succeeds because the rejected allocation is in the DAG
+    // but not in the opout ancestry chain)
+    let receive_data = test_blind_receive(&wallet_4);
+    let recipient_map_3 = HashMap::from([(
+        asset.asset_id.clone(),
+        vec![Recipient {
+            assignment: Assignment::Fungible(40),
+            recipient_id: receive_data.recipient_id.clone(),
+            witness_data: None,
+            transport_endpoints: TRANSPORT_ENDPOINTS.clone(),
+        }],
+    )]);
+    let _txid = test_send(&mut wallet_3, &online_3, &recipient_map_3);
+    wait_for_refresh(&mut wallet_4, &online_4, None, None);
+    wait_for_refresh(&mut wallet_3, &online_3, None, None);
+    mine(false, false);
+    wait_for_refresh(&mut wallet_3, &online_3, None, None);
+    wait_for_refresh(&mut wallet_4, &online_4, None, None);
 }
 
 #[cfg(feature = "electrum")]

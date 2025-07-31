@@ -314,6 +314,7 @@ pub(crate) fn test_issue_asset_ifa(
     amounts: Option<&[u64]>,
     inflation_amounts: Option<&[u64]>,
     replace_rights_num: u8,
+    reject_list_url: Option<String>,
 ) -> AssetIFA {
     test_issue_asset_ifa_result(
         wallet,
@@ -321,6 +322,7 @@ pub(crate) fn test_issue_asset_ifa(
         amounts,
         inflation_amounts,
         replace_rights_num,
+        reject_list_url,
     )
     .unwrap()
 }
@@ -332,6 +334,7 @@ pub(crate) fn test_issue_asset_ifa_result(
     amounts: Option<&[u64]>,
     inflation_amounts: Option<&[u64]>,
     replace_rights_num: u8,
+    reject_list_url: Option<String>,
 ) -> Result<AssetIFA, Error> {
     test_fail_transfers_all(wallet, online);
     let amounts = if let Some(a) = amounts {
@@ -351,6 +354,7 @@ pub(crate) fn test_issue_asset_ifa_result(
         amounts,
         inflation_amounts,
         replace_rights_num,
+        reject_list_url,
     )
 }
 

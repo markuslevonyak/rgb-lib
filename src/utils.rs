@@ -32,7 +32,7 @@ pub(crate) const INDEXER_BATCH_SIZE: usize = 5;
 pub(crate) const INDEXER_PARALLEL_REQUESTS: usize = 5;
 
 #[cfg(any(feature = "electrum", feature = "esplora"))]
-pub(crate) const PROXY_TIMEOUT: u8 = 90;
+pub(crate) const REST_CLIENT_TIMEOUT: u8 = 90;
 #[cfg(any(feature = "electrum", feature = "esplora"))]
 const PROXY_PROTOCOL_VERSION: &str = "0.2";
 
@@ -534,10 +534,13 @@ fn check_genesis_hash(bitcoin_network: &BitcoinNetwork, indexer: &Indexer) -> Re
 }
 
 #[cfg(any(feature = "electrum", feature = "esplora"))]
-pub(crate) fn get_proxy_client() -> Result<RestClient, Error> {
-    Ok(RestClient::builder()
-        .timeout(Duration::from_secs(PROXY_TIMEOUT as u64))
-        .build()?)
+pub(crate) fn get_rest_client() -> Result<RestClient, Error> {
+    RestClient::builder()
+        .timeout(Duration::from_secs(REST_CLIENT_TIMEOUT as u64))
+        .build()
+        .map_err(|e| Error::RestClientBuild {
+            details: e.to_string(),
+        })
 }
 
 #[cfg(any(feature = "electrum", feature = "esplora"))]
@@ -545,7 +548,7 @@ pub(crate) fn check_proxy(proxy_url: &str, rest_client: Option<&RestClient>) -> 
     let rest_client = if let Some(rest_client) = rest_client {
         rest_client.clone()
     } else {
-        get_proxy_client()?
+        get_rest_client()?
     };
     let mut err_details = s!("unable to connect to proxy");
     if let Ok(server_info) = rest_client.clone().get_info(proxy_url) {
@@ -828,6 +831,19 @@ impl RgbRuntime {
     ) -> Result<RgbTransfer, InternalError> {
         self.stock
             .transfer(contract_id, outputs, secret_seals, [], witness_id)
+            .map_err(InternalError::from)
+    }
+
+    #[cfg(any(feature = "electrum", feature = "esplora"))]
+    pub(crate) fn transfer_with_dag(
+        &self,
+        contract_id: ContractId,
+        outputs: impl AsRef<[OutputSeal]>,
+        secret_seals: impl AsRef<[SecretSeal]>,
+        witness_id: Option<RgbTxid>,
+    ) -> Result<(RgbTransfer, OpoutsDagData), InternalError> {
+        self.stock
+            .transfer_with_dag(contract_id, outputs, secret_seals, [], witness_id)
             .map_err(InternalError::from)
     }
 

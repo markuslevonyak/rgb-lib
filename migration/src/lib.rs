@@ -2,6 +2,7 @@ pub use sea_orm_migration::prelude::*;
 
 mod m20230608_071249_init_db;
 mod m20251017_074408_asset_update;
+mod m20251105_132121_asset_update;
 
 pub struct Migrator;
 
@@ -11,6 +12,7 @@ impl MigratorTrait for Migrator {
         vec![
             Box::new(m20230608_071249_init_db::Migration),
             Box::new(m20251017_074408_asset_update::Migration),
+            Box::new(m20251105_132121_asset_update::Migration),
         ]
     }
 }

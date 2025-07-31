@@ -60,6 +60,7 @@ interface RgbLibError {
   InvalidRecipientData(string details);
   InvalidRecipientID();
   InvalidRecipientNetwork();
+  InvalidRejectListUrl(string details);
   InvalidTicker(string details);
   InvalidTransportEndpoint(string details);
   InvalidTransportEndpoints(string details);
@@ -79,6 +80,8 @@ interface RgbLibError {
   Proxy(string details);
   RecipientIDAlreadyUsed();
   RecipientIDDuplicated();
+  RejectListService(string details);
+  RestClientBuild(string details);
   TooHighInflationAmounts();
   TooHighIssuanceAmounts();
   UnknownRgbSchema(string schema_id);
@@ -174,6 +177,7 @@ dictionary AssetIFA {
   i64 added_at;
   Balance balance;
   Media? media;
+  string? reject_list_url;
 };
 
 [Remote]
@@ -333,6 +337,7 @@ dictionary Metadata {
   string? ticker;
   string? details;
   Token? token;
+  string? reject_list_url;
 };
 
 [Remote]
@@ -597,7 +602,8 @@ interface Wallet {
   [Throws=RgbLibError]
   AssetIFA issue_asset_ifa(
     string ticker, string name, u8 precision, sequence<u64> amounts,
-    sequence<u64> inflation_amounts, u8 replace_rights_num);
+    sequence<u64> inflation_amounts, u8 replace_rights_num,
+    string? reject_list_url);
 
   [Throws=RgbLibError]
   Assets list_assets(sequence<AssetSchema> filter_asset_schemas);

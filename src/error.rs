@@ -312,6 +312,13 @@ pub enum Error {
     #[error("The provided recipient ID is for a different network than the wallet's one")]
     InvalidRecipientNetwork,
 
+    /// The provided reject list URL is invalid
+    #[error("Invalid reject list URL: {details}")]
+    InvalidRejectListUrl {
+        /// Error details
+        details: String,
+    },
+
     /// The provided asset ticker is invalid
     #[error("Invalid ticker: {details}")]
     InvalidTicker {
@@ -408,6 +415,20 @@ pub enum Error {
     /// Provided recipient map has duplicated recipient IDs
     #[error("Recipient ID duplicated")]
     RecipientIDDuplicated,
+
+    /// Error contacting the reject list service
+    #[error("Reject list service error: {details}")]
+    RejectListService {
+        /// Error details
+        details: String,
+    },
+
+    /// Error building a rest client
+    #[error("Error building a rest client")]
+    RestClientBuild {
+        /// Error details
+        details: String,
+    },
 
     /// The inflation amount exceeds the max possible supply
     #[error("The inflation amount exceeds the max possible supply")]
@@ -684,15 +705,6 @@ impl
 impl From<rgbinvoice::TransportParseError> for Error {
     fn from(e: rgbinvoice::TransportParseError) -> Self {
         Error::InvalidTransportEndpoint {
-            details: e.to_string(),
-        }
-    }
-}
-
-#[cfg(any(feature = "electrum", feature = "esplora"))]
-impl From<reqwest::Error> for Error {
-    fn from(e: reqwest::Error) -> Self {
-        Error::Proxy {
             details: e.to_string(),
         }
     }

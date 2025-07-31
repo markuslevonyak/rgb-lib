@@ -376,7 +376,10 @@ impl Wallet {
         let _status = runtime.accept_transfer(valid_consignment, &resolver)?;
 
         info!(self.logger, "Accept transfer completed");
-        Ok((consignment, received_rgb_assignments))
+        Ok((
+            consignment,
+            received_rgb_assignments.into_values().collect(),
+        ))
     }
 
     /// Consume an RGB fascia.
@@ -535,6 +538,7 @@ impl Wallet {
                         initial_supply,
                         max_supply: None,
                         known_circulating_supply: None,
+                        reject_list_url: None,
                     },
                     None,
                 )
@@ -559,6 +563,7 @@ impl Wallet {
                         initial_supply,
                         max_supply: None,
                         known_circulating_supply: None,
+                        reject_list_url: None,
                     },
                     Some(token_full),
                 )
@@ -587,6 +592,7 @@ impl Wallet {
                         initial_supply,
                         max_supply: None,
                         known_circulating_supply: None,
+                        reject_list_url: None,
                     },
                     None,
                 )
@@ -611,6 +617,7 @@ impl Wallet {
                 let known_circulating_supply = IfaWrapper::with(valid_transfer.contract_data())
                     .total_issued_supply()
                     .into();
+                let reject_list_url = contract.reject_list_url().map(|u| u.to_string());
                 (
                     LocalAssetData {
                         name,
@@ -621,6 +628,7 @@ impl Wallet {
                         initial_supply,
                         max_supply: Some(max_supply),
                         known_circulating_supply: Some(known_circulating_supply),
+                        reject_list_url,
                     },
                     None,
                 )
