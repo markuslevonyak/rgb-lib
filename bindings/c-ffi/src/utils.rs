@@ -290,6 +290,30 @@ pub(crate) fn go_online(
     Ok(wallet.go_online(skip_consistency_check, ptr_to_string(electrum_url))?)
 }
 
+pub(crate) fn inflate(
+    wallet: &COpaqueStruct,
+    online: &COpaqueStruct,
+    asset_id: *const c_char,
+    inflation_amounts: *const c_char,
+    fee_rate: *const c_char,
+    min_confirmations: *const c_char,
+) -> Result<String, Error> {
+    let wallet = Wallet::from_opaque(wallet)?;
+    let online = Online::from_opaque(online)?;
+    let asset_id = ptr_to_string(asset_id);
+    let inflation_amounts = convert_strings_array(inflation_amounts)?;
+    let fee_rate = ptr_to_num(fee_rate)?;
+    let min_confirmations = ptr_to_num(min_confirmations)?;
+    let res = wallet.inflate(
+        (*online).clone(),
+        asset_id,
+        inflation_amounts,
+        fee_rate,
+        min_confirmations,
+    )?;
+    Ok(serde_json::to_string(&res)?)
+}
+
 pub(crate) fn issue_asset_cfa(
     wallet: &COpaqueStruct,
     name: *const c_char,

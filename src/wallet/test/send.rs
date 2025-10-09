@@ -6096,7 +6096,7 @@ fn pending_witness_ma1_blind_receive_fail() {
             transport_endpoints: TRANSPORT_ENDPOINTS.clone(),
         }],
     )]);
-    let SendResult { txid, .. } = wallet
+    let OperationResult { txid, .. } = wallet
         .send(
             online.clone(),
             recipient_map.clone(),
@@ -6257,7 +6257,7 @@ fn pending_witness_txo() {
             transport_endpoints: TRANSPORT_ENDPOINTS.clone(),
         }],
     )]);
-    let SendResult { txid, .. } = wallet
+    let OperationResult { txid, .. } = wallet
         .send(
             online.clone(),
             recipient_map.clone(),

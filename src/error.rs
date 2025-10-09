@@ -366,6 +366,10 @@ pub enum Error {
     #[error("No consignment found")]
     NoConsignment,
 
+    /// Cannot inflate an asset with unknown o zero amounts
+    #[error("Inflation request with no amounts or zero amounts")]
+    NoInflationAmounts,
+
     /// Cannot issue an asset without knowing the amounts
     #[error("Issuance request with no provided amounts")]
     NoIssuanceAmounts,
@@ -432,6 +436,13 @@ pub enum Error {
     UnsupportedBackupVersion {
         /// Backup version
         version: String,
+    },
+
+    /// The schema doesn't support inflation
+    #[error("Inflation not supported")]
+    UnsupportedInflation {
+        /// Asset schema
+        asset_schema: AssetSchema,
     },
 
     /// The given layer 1 is not supported

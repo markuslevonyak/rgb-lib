@@ -21,11 +21,13 @@ pub struct Model {
     pub schema: AssetSchema,
     pub added_at: i64,
     pub details: Option<String>,
-    pub issued_supply: String,
+    pub initial_supply: String,
     pub name: String,
     pub precision: u8,
     pub ticker: Option<String>,
     pub timestamp: i64,
+    pub max_supply: Option<String>,
+    pub known_circulating_supply: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveColumn)]
@@ -36,11 +38,13 @@ pub enum Column {
     Schema,
     AddedAt,
     Details,
-    IssuedSupply,
+    InitialSupply,
     Name,
     Precision,
     Ticker,
     Timestamp,
+    MaxSupply,
+    KnownCirculatingSupply,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DerivePrimaryKey)]
@@ -72,11 +76,13 @@ impl ColumnTrait for Column {
             Self::Schema => ColumnType::SmallInteger.def(),
             Self::AddedAt => ColumnType::BigInteger.def(),
             Self::Details => ColumnType::String(StringLen::None).def().null(),
-            Self::IssuedSupply => ColumnType::String(StringLen::None).def(),
+            Self::InitialSupply => ColumnType::String(StringLen::None).def(),
             Self::Name => ColumnType::String(StringLen::None).def(),
             Self::Precision => ColumnType::SmallInteger.def(),
             Self::Ticker => ColumnType::String(StringLen::None).def().null(),
             Self::Timestamp => ColumnType::BigInteger.def(),
+            Self::MaxSupply => ColumnType::String(StringLen::None).def().null(),
+            Self::KnownCirculatingSupply => ColumnType::String(StringLen::None).def().null(),
         }
     }
 }

@@ -417,6 +417,13 @@ impl RgbLibDatabase {
     }
 
     #[cfg_attr(not(any(feature = "electrum", feature = "esplora")), allow(dead_code))]
+    pub(crate) fn update_asset(&self, asset: &mut DbAssetActMod) -> Result<DbAsset, InternalError> {
+        Ok(block_on(
+            Asset::update(asset.clone()).exec(self.get_connection()),
+        )?)
+    }
+
+    #[cfg_attr(not(any(feature = "electrum", feature = "esplora")), allow(dead_code))]
     pub(crate) fn update_asset_transfer(
         &self,
         asset_transfer: &mut DbAssetTransferActMod,

@@ -35,7 +35,7 @@ fn success() {
     );
 
     assert_eq!(nia_metadata.asset_schema, AssetSchema::Nia);
-    assert_eq!(nia_metadata.issued_supply, AMOUNT * 2);
+    assert_eq!(nia_metadata.initial_supply, AMOUNT * 2);
     assert_eq!(nia_metadata.name, NAME.to_string());
     assert_eq!(nia_metadata.precision, PRECISION);
     assert_eq!(nia_metadata.ticker.unwrap(), TICKER.to_string());
@@ -58,7 +58,7 @@ fn success() {
     let uda_metadata = test_get_asset_metadata(&wallet, &asset_uda.asset_id);
 
     assert_eq!(uda_metadata.asset_schema, AssetSchema::Uda);
-    assert_eq!(uda_metadata.issued_supply, 1);
+    assert_eq!(uda_metadata.initial_supply, 1);
     assert_eq!(uda_metadata.name, NAME.to_string());
     assert_eq!(uda_metadata.precision, PRECISION);
     assert_eq!(uda_metadata.ticker, Some(TICKER.to_string()));
@@ -92,7 +92,7 @@ fn success() {
     let cfa_metadata = test_get_asset_metadata(&wallet, &asset_cfa.asset_id);
 
     assert_eq!(cfa_metadata.asset_schema, AssetSchema::Cfa);
-    assert_eq!(cfa_metadata.issued_supply, AMOUNT * 2);
+    assert_eq!(cfa_metadata.initial_supply, AMOUNT * 2);
     assert_eq!(cfa_metadata.name, NAME.to_string());
     assert_eq!(cfa_metadata.precision, PRECISION);
     assert_eq!(cfa_metadata.ticker, None);

@@ -158,6 +158,26 @@ pub extern "C" fn rgblib_go_online(
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn rgblib_inflate(
+    wallet: &COpaqueStruct,
+    online: &COpaqueStruct,
+    asset_id: *const c_char,
+    inflation_amounts: *const c_char,
+    fee_rate: *const c_char,
+    min_confirmations: *const c_char,
+) -> CResultString {
+    inflate(
+        wallet,
+        online,
+        asset_id,
+        inflation_amounts,
+        fee_rate,
+        min_confirmations,
+    )
+    .into()
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn rgblib_issue_asset_cfa(
     wallet: &COpaqueStruct,
     name: *const c_char,

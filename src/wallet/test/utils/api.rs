@@ -194,6 +194,23 @@ pub(crate) fn test_go_online_result(
     wallet.go_online(skip_consistency_check, electrum)
 }
 
+pub(crate) fn test_inflate(
+    wallet: &mut Wallet,
+    online: &Online,
+    asset_id: &str,
+    inflation_amounts: &[u64],
+) -> OperationResult {
+    wallet
+        .inflate(
+            online.clone(),
+            asset_id.to_string(),
+            inflation_amounts.to_vec(),
+            FEE_RATE,
+            MIN_CONFIRMATIONS,
+        )
+        .unwrap()
+}
+
 #[cfg(any(feature = "electrum", feature = "esplora"))]
 pub(crate) fn test_issue_asset_uda(
     wallet: &mut Wallet,
@@ -449,17 +466,17 @@ pub(crate) fn test_save_new_asset(
         trusted_typesystem: asset_schema.types(),
         ..Default::default()
     };
+    let mut runtime = rcv_wallet.rgb_runtime().unwrap();
     let valid_contract = contract
         .clone()
         .validate(&DumbResolver, &validation_config)
         .unwrap();
-    let mut runtime = rcv_wallet.rgb_runtime().unwrap();
     runtime
-        .import_contract(valid_contract.clone(), rcv_wallet.blockchain_resolver())
+        .import_contract(valid_contract, rcv_wallet.blockchain_resolver())
         .unwrap();
     drop(runtime);
 
-    rcv_wallet.save_new_asset(consignment).unwrap();
+    rcv_wallet.save_new_asset(consignment, txid).unwrap();
 }
 
 #[cfg(any(feature = "electrum", feature = "esplora"))]
@@ -478,7 +495,7 @@ pub(crate) fn test_send_result(
     wallet: &mut Wallet,
     online: &Online,
     recipient_map: &HashMap<String, Vec<Recipient>>,
-) -> Result<SendResult, Error> {
+) -> Result<OperationResult, Error> {
     wallet.send(
         online.clone(),
         recipient_map.clone(),

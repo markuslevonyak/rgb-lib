@@ -32,6 +32,8 @@ pub(crate) const RGB_STATE_ASSET_OWNER: &str = "assetOwner";
 pub(crate) const RGB_STATE_INFLATION_ALLOWANCE: &str = "inflationAllowance";
 pub(crate) const RGB_STATE_REPLACE_RIGHT: &str = "replaceRight";
 pub(crate) const RGB_GLOBAL_ISSUED_SUPPLY: &str = "issuedSupply";
+#[cfg(any(feature = "electrum", feature = "esplora"))]
+pub(crate) const RGB_METADATA_ALLOWED_INFLATION: &str = "allowedInflation";
 
 pub(crate) const SCHEMA_ID_NIA: &str =
     "rgb:sch:RWhwUfTMpuP2Zfx1~j4nswCANGeJrYOqDcKelaMV4zU#remote-digital-pegasus";
@@ -49,7 +51,9 @@ pub(crate) struct LocalAssetData {
     pub(crate) ticker: Option<String>,
     pub(crate) details: Option<String>,
     pub(crate) media_idx: Option<i32>,
-    pub(crate) issued_supply: u64,
+    pub(crate) initial_supply: u64,
+    pub(crate) max_supply: Option<u64>,
+    pub(crate) known_circulating_supply: Option<u64>,
 }
 
 /// The bitcoin balances (in sats) for the vanilla and colored wallets.
@@ -124,8 +128,12 @@ impl Media {
 pub struct Metadata {
     /// Asset schema type
     pub asset_schema: AssetSchema,
-    /// Total issued amount
-    pub issued_supply: u64,
+    /// Initial issued supply
+    pub initial_supply: u64,
+    /// Max issued supply
+    pub max_supply: u64,
+    /// Known circulating supply
+    pub known_circulating_supply: u64,
     /// Timestamp of asset genesis
     pub timestamp: i64,
     /// Asset name
@@ -196,14 +204,14 @@ impl AssetNIA {
             colorings,
             txos,
         )?;
-        let issued_supply = asset.issued_supply.parse::<u64>().unwrap();
+        let initial_supply = asset.initial_supply.parse::<u64>().unwrap();
         Ok(AssetNIA {
             asset_id: asset.id.clone(),
             ticker: asset.ticker.clone().unwrap(),
             name: asset.name.clone(),
             details: asset.details.clone(),
             precision: asset.precision,
-            issued_supply,
+            issued_supply: initial_supply,
             timestamp: asset.timestamp,
             added_at: asset.added_at,
             balance,
@@ -331,8 +339,6 @@ pub struct AssetUDA {
     pub details: Option<String>,
     /// Precision, also known as divisibility, of the asset
     pub precision: u8,
-    /// Total issued amount
-    pub issued_supply: u64,
     /// Timestamp of asset genesis
     pub timestamp: i64,
     /// Timestamp of asset import
@@ -362,14 +368,12 @@ impl AssetUDA {
             colorings,
             txos,
         )?;
-        let issued_supply = asset.issued_supply.parse::<u64>().unwrap();
         Ok(AssetUDA {
             asset_id: asset.id.clone(),
             details: asset.details.clone(),
             ticker: asset.ticker.clone().unwrap(),
             name: asset.name.clone(),
             precision: asset.precision,
-            issued_supply,
             timestamp: asset.timestamp,
             added_at: asset.added_at,
             balance,
@@ -432,13 +436,13 @@ impl AssetCFA {
             colorings,
             txos,
         )?;
-        let issued_supply = asset.issued_supply.parse::<u64>().unwrap();
+        let initial_supply = asset.initial_supply.parse::<u64>().unwrap();
         Ok(AssetCFA {
             asset_id: asset.id.clone(),
             name: asset.name.clone(),
             details: asset.details.clone(),
             precision: asset.precision,
-            issued_supply,
+            issued_supply: initial_supply,
             timestamp: asset.timestamp,
             added_at: asset.added_at,
             balance,
@@ -461,8 +465,12 @@ pub struct AssetIFA {
     pub details: Option<String>,
     /// Precision, also known as divisibility, of the asset
     pub precision: u8,
-    /// Total issued amount
-    pub issued_supply: u64,
+    /// Initial issued supply
+    pub initial_supply: u64,
+    /// Max issued supply
+    pub max_supply: u64,
+    /// Known circulating supply
+    pub known_circulating_supply: u64,
     /// Timestamp of asset genesis
     pub timestamp: i64,
     /// Timestamp of asset import
@@ -503,14 +511,23 @@ impl AssetIFA {
             colorings,
             txos,
         )?;
-        let issued_supply = asset.issued_supply.parse::<u64>().unwrap();
+        let initial_supply = asset.initial_supply.parse::<u64>().unwrap();
+        let max_supply = asset.max_supply.as_ref().unwrap().parse::<u64>().unwrap();
+        let known_circulating_supply = asset
+            .known_circulating_supply
+            .as_ref()
+            .unwrap()
+            .parse::<u64>()
+            .unwrap();
         Ok(AssetIFA {
             asset_id: asset.id.clone(),
             ticker: asset.ticker.clone().unwrap(),
             name: asset.name.clone(),
             details: asset.details.clone(),
             precision: asset.precision,
-            issued_supply,
+            initial_supply,
+            max_supply,
+            known_circulating_supply,
             timestamp: asset.timestamp,
             added_at: asset.added_at,
             balance,
@@ -1101,6 +1118,8 @@ pub enum TransferKind {
     ReceiveWitness,
     /// An outgoing transfer
     Send,
+    /// An inflation transfer
+    Inflation,
 }
 
 /// A wallet unspent.
@@ -1636,7 +1655,7 @@ impl Wallet {
         })
     }
 
-    fn _get_total_inflation_amount(
+    pub(crate) fn get_total_inflation_amount(
         &self,
         inflation_amounts: &[u64],
         issued_supply: u64,
@@ -1844,7 +1863,9 @@ impl Wallet {
             ticker: Some(ticker),
             details: spec.details().map(|d| d.to_string()),
             media_idx: None,
-            issued_supply: settled,
+            initial_supply: settled,
+            max_supply: None,
+            known_circulating_supply: None,
         };
         let asset = self.add_asset_to_db(
             asset_id.clone(),
@@ -2052,7 +2073,9 @@ impl Wallet {
             ticker: Some(ticker),
             details,
             media_idx: None,
-            issued_supply: 1,
+            initial_supply: 1,
+            max_supply: None,
+            known_circulating_supply: None,
         };
         let asset = self.add_asset_to_db(
             asset_id.clone(),
@@ -2239,7 +2262,9 @@ impl Wallet {
             ticker: None,
             details,
             media_idx,
-            issued_supply: settled,
+            initial_supply: settled,
+            max_supply: None,
+            known_circulating_supply: None,
         };
         let asset = self.add_asset_to_db(
             asset_id.clone(),
@@ -2327,7 +2352,8 @@ impl Wallet {
         self.check_schema_support(asset_schema)?;
 
         let settled = self._get_total_issue_amount(&amounts, true)?;
-        let inflation_amt = self._get_total_inflation_amount(&inflation_amounts, settled)?;
+        let inflation_amt = self.get_total_inflation_amount(&inflation_amounts, settled)?;
+        let max_supply = settled + inflation_amt;
 
         let db_data = self.database.get_db_data(false)?;
 
@@ -2375,7 +2401,7 @@ impl Wallet {
         .expect("invalid terms")
         .add_global_state(RGB_GLOBAL_ISSUED_SUPPLY, Amount::from(settled))
         .expect("invalid issuedSupply")
-        .add_global_state("maxSupply", Amount::from(settled + inflation_amt))
+        .add_global_state("maxSupply", Amount::from(max_supply))
         .expect("invalid maxSupply");
 
         let mut issue_utxos: HashMap<DbTxo, u64> = HashMap::new();
@@ -2435,7 +2461,9 @@ impl Wallet {
             ticker: Some(ticker),
             details: spec.details().map(|d| d.to_string()),
             media_idx: None,
-            issued_supply: settled,
+            initial_supply: settled,
+            max_supply: Some(max_supply),
+            known_circulating_supply: Some(settled),
         };
         let asset = self.add_asset_to_db(
             asset_id.clone(),
@@ -2989,7 +3017,18 @@ impl Wallet {
         info!(self.logger, "Getting metadata for asset '{}'...", asset_id);
         let asset = self.database.check_asset_exists(asset_id.clone())?;
 
-        let issued_supply = asset.issued_supply.parse::<u64>().unwrap();
+        let initial_supply = asset.initial_supply.parse::<u64>().unwrap();
+        let max_supply = if let Some(max_supply) = asset.max_supply {
+            max_supply.parse::<u64>().unwrap()
+        } else {
+            initial_supply
+        };
+        let known_circulating_supply =
+            if let Some(known_circulating_supply) = asset.known_circulating_supply {
+                known_circulating_supply.parse::<u64>().unwrap()
+            } else {
+                initial_supply
+            };
         let token = if matches!(asset.schema, AssetSchema::Uda) {
             let medias = self.database.iter_media()?;
             let tokens = self.database.iter_tokens()?;
@@ -3027,7 +3066,9 @@ impl Wallet {
         info!(self.logger, "Get asset metadata completed");
         Ok(Metadata {
             asset_schema: asset.schema,
-            issued_supply,
+            initial_supply,
+            max_supply,
+            known_circulating_supply,
             timestamp: asset.timestamp,
             name: asset.name,
             precision: asset.precision,
@@ -3083,7 +3124,11 @@ impl Wallet {
             schema: ActiveValue::Set(*schema),
             added_at: ActiveValue::Set(added_at),
             details: ActiveValue::Set(asset_data.details),
-            issued_supply: ActiveValue::Set(asset_data.issued_supply.to_string()),
+            initial_supply: ActiveValue::Set(asset_data.initial_supply.to_string()),
+            max_supply: ActiveValue::Set(asset_data.max_supply.map(|s| s.to_string())),
+            known_circulating_supply: ActiveValue::Set(
+                asset_data.known_circulating_supply.map(|s| s.to_string()),
+            ),
             name: ActiveValue::Set(asset_data.name),
             precision: ActiveValue::Set(asset_data.precision),
             ticker: ActiveValue::Set(asset_data.ticker),
@@ -3409,8 +3454,7 @@ impl Wallet {
             .map(|c| c.assignment)
             .collect();
 
-        let incoming = transfer.incoming;
-        let kind = if incoming {
+        let kind = if transfer.incoming {
             if filtered_coloring.clone().count() > 0
                 && filtered_coloring
                     .clone()
@@ -3423,6 +3467,13 @@ impl Wallet {
                     RecipientTypeFull::Witness { .. } => TransferKind::ReceiveWitness,
                 }
             }
+        } else if filtered_coloring.clone().count() > 0
+            && filtered_coloring
+                .clone()
+                .any(|c| c.r#type == ColoringType::Issue)
+        {
+            // inflation transfer is outgoing and connected to issue colorings
+            TransferKind::Inflation
         } else {
             TransferKind::Send
         };
@@ -3435,16 +3486,17 @@ impl Wallet {
             .collect();
         let receive_utxo = match &transfer.recipient_type {
             Some(RecipientTypeFull::Blind { unblinded_utxo }) => Some(unblinded_utxo.clone()),
-            Some(RecipientTypeFull::Witness { .. }) => {
+            Some(RecipientTypeFull::Witness { vout }) => {
                 let received_txo_idx: Vec<i32> = filtered_coloring
                     .clone()
-                    .filter(|c| c.r#type == ColoringType::Receive)
+                    // issue coloring from inflation is considered as received
+                    .filter(|c| [ColoringType::Receive, ColoringType::Issue].contains(&c.r#type))
                     .map(|c| c.txo_idx)
                     .collect();
                 transfer_txos
                     .clone()
                     .into_iter()
-                    .filter(|t| received_txo_idx.contains(&t.idx))
+                    .filter(|t| received_txo_idx.contains(&t.idx) && t.vout == vout.unwrap())
                     .map(|t| t.outpoint())
                     .collect::<Vec<Outpoint>>()
                     .first()
@@ -3454,7 +3506,7 @@ impl Wallet {
         };
         let change_utxo = match kind {
             TransferKind::ReceiveBlind | TransferKind::ReceiveWitness => None,
-            TransferKind::Send => {
+            TransferKind::Send | TransferKind::Inflation => {
                 let change_txo_idx: Vec<i32> = filtered_coloring
                     .filter(|c| c.r#type == ColoringType::Change)
                     .map(|c| c.txo_idx)
@@ -3471,10 +3523,12 @@ impl Wallet {
         };
 
         let consignment_path = match (&kind, batch_transfer.status) {
-            (TransferKind::Send, _) => Some(self.get_send_consignment_path(
-                &asset_transfer.asset_id.clone().unwrap(),
-                &batch_transfer.txid.clone().unwrap(),
-            )),
+            (TransferKind::Send | TransferKind::Inflation, _) => {
+                Some(self.get_send_consignment_path(
+                    &asset_transfer.asset_id.clone().unwrap(),
+                    &batch_transfer.txid.clone().unwrap(),
+                ))
+            }
             (
                 TransferKind::ReceiveBlind | TransferKind::ReceiveWitness,
                 TransferStatus::WaitingCounterparty,

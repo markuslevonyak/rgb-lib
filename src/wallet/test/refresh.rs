@@ -344,11 +344,7 @@ fn nia_with_media() {
         .unwrap();
     let mut updated_asset: DbAssetActMod = db_asset.into();
     updated_asset.media_idx = ActiveValue::Set(Some(media_idx));
-    block_on(
-        crate::database::entities::asset::Entity::update(updated_asset)
-            .exec(wallet_1.database.get_connection()),
-    )
-    .unwrap();
+    wallet_1.database.update_asset(&mut updated_asset).unwrap();
 
     let receive_data = test_blind_receive(&wallet_2);
     let recipient_map = HashMap::from([(
@@ -582,7 +578,7 @@ fn uda_with_preview_and_reserves() {
 
     let uda_metadata = test_get_asset_metadata(&wallet_3, &asset.asset_id);
     assert_eq!(uda_metadata.asset_schema, AssetSchema::Uda);
-    assert_eq!(uda_metadata.issued_supply, 1);
+    assert_eq!(uda_metadata.initial_supply, 1);
     assert_eq!(uda_metadata.name, NAME.to_string());
     assert_eq!(uda_metadata.precision, PRECISION);
     assert_eq!(uda_metadata.ticker, Some(TICKER.to_string()));

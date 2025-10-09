@@ -254,7 +254,7 @@ pub(crate) fn check_test_wallet_data(
     // asset metadata
     let metadata = test_get_asset_metadata(wallet, &asset.asset_id);
     assert_eq!(metadata.asset_schema, AssetSchema::Nia);
-    assert_eq!(metadata.issued_supply, issued_supply);
+    assert_eq!(metadata.initial_supply, issued_supply);
     assert_eq!(metadata.name, asset.name);
     assert_eq!(metadata.precision, asset.precision);
     assert_eq!(metadata.ticker.unwrap(), asset.ticker);

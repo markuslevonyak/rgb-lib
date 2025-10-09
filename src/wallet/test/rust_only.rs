@@ -264,7 +264,7 @@ fn save_new_asset_success() {
         .unwrap()
         .unwrap();
     assert_eq!(asset_model.id, nia_asset.asset_id);
-    assert_eq!(asset_model.issued_supply, AMOUNT.to_string());
+    assert_eq!(asset_model.initial_supply, AMOUNT.to_string());
     assert_eq!(asset_model.name, NAME);
     assert_eq!(asset_model.precision, PRECISION);
     assert_eq!(asset_model.ticker.unwrap(), TICKER);
@@ -291,7 +291,7 @@ fn save_new_asset_success() {
         .unwrap()
         .unwrap();
     assert_eq!(asset_model.id, cfa_asset.asset_id);
-    assert_eq!(asset_model.issued_supply, AMOUNT.to_string());
+    assert_eq!(asset_model.initial_supply, AMOUNT.to_string());
     assert_eq!(asset_model.name, NAME);
     assert_eq!(asset_model.precision, PRECISION);
     assert!(asset_model.ticker.is_none());
@@ -327,7 +327,7 @@ fn save_new_asset_success() {
         .unwrap()
         .unwrap();
     assert_eq!(asset_model.id, uda_asset.asset_id);
-    assert_eq!(asset_model.issued_supply, 1.to_string());
+    assert_eq!(asset_model.initial_supply, 1.to_string());
     assert_eq!(asset_model.name, NAME);
     assert_eq!(asset_model.precision, PRECISION);
     assert_eq!(asset_model.ticker.unwrap(), TICKER);

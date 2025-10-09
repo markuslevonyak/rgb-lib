@@ -71,9 +71,7 @@ pub use bdk_wallet::bitcoin;
 pub use rgbinvoice::RgbTransport;
 pub use rgbstd::{
     ContractId, Txid as RgbTxid,
-    containers::{
-        ConsignmentExt, Contract, Fascia, FileContent, PubWitness, Transfer as RgbTransfer,
-    },
+    containers::{ConsignmentExt, Fascia, FileContent, PubWitness, Transfer as RgbTransfer},
     persistence::UpdateRes,
     schema::SchemaId,
     vm::WitnessOrd,
@@ -89,7 +87,7 @@ pub use crate::{
 
 #[cfg(any(feature = "electrum", feature = "esplora"))]
 use std::{
-    cmp::{Ordering, min},
+    cmp::{Ordering, max, min},
     collections::hash_map::DefaultHasher,
     hash::Hasher,
     num::NonZeroU32,
@@ -152,7 +150,10 @@ use bdk_wallet::{
 use bdk_wallet::{
     Update,
     bitcoin::{Transaction as BdkTransaction, blockdata::fee_rate::FeeRate},
-    chain::spk_client::{FullScanRequest, FullScanResponse, SyncRequest, SyncResponse},
+    chain::{
+        DescriptorExt,
+        spk_client::{FullScanRequest, FullScanResponse, SyncRequest, SyncResponse},
+    },
     coin_selection::InsufficientFunds,
 };
 use chacha20poly1305::{
@@ -193,18 +194,17 @@ use rgbstd::{
         TokenData,
     },
     validation::{
-        ResolveWitness, Scripts, Status, ValidationConfig, WitnessOrdProvider,
-        WitnessResolverError, WitnessStatus,
+        ResolveWitness, Scripts, Status, WitnessOrdProvider, WitnessResolverError, WitnessStatus,
     },
 };
 #[cfg(any(feature = "electrum", feature = "esplora"))]
 use rgbstd::{
     Assign,
     containers::Consignment,
-    validation::{ValidationError, Validity, Warning},
+    contract::SchemaWrapper,
+    indexers::AnyResolver,
+    validation::{ValidationConfig, ValidationError, Validity, Warning},
 };
-#[cfg(any(feature = "electrum", feature = "esplora"))]
-use rgbstd::{contract::SchemaWrapper, indexers::AnyResolver};
 #[cfg(any(feature = "electrum", feature = "esplora"))]
 use schemata::{
     CfaWrapper, IfaWrapper, NiaWrapper, OS_ASSET, OS_INFLATION, OS_REPLACE, UdaWrapper,

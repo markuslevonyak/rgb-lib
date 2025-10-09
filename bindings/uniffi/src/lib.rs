@@ -13,12 +13,12 @@ use rgb_lib::{
         Address as RgbLibAddress, AssetCFA, AssetIFA, AssetNIA, AssetUDA, Assets,
         AssignmentsCollection, Balance, BlockTime, BtcBalance, DatabaseType, EmbeddedMedia,
         Invoice as RgbLibInvoice, InvoiceData as RgbLibInvoiceData, Media, Metadata, Online,
-        Outpoint, ProofOfReserves, ReceiveData, Recipient as RgbLibRecipient,
+        OperationResult, Outpoint, ProofOfReserves, ReceiveData, Recipient as RgbLibRecipient,
         RecipientInfo as RgbLibRecipientInfo, RefreshFilter, RefreshTransferStatus,
-        RefreshedTransfer, RgbAllocation as RgbLibRgbAllocation, SendResult, Token, TokenLight,
-        Transaction, TransactionType, Transfer as RgbLibTransfer, TransferKind,
-        TransferTransportEndpoint, TransportEndpoint as RgbLibTransportEndpoint,
-        Unspent as RgbLibUnspent, Utxo, Wallet as RgbLibWallet, WalletData, WitnessData,
+        RefreshedTransfer, RgbAllocation as RgbLibRgbAllocation, Token, TokenLight, Transaction,
+        TransactionType, Transfer as RgbLibTransfer, TransferKind, TransferTransportEndpoint,
+        TransportEndpoint as RgbLibTransportEndpoint, Unspent as RgbLibUnspent, Utxo,
+        Wallet as RgbLibWallet, WalletData, WitnessData,
     },
 };
 
@@ -521,6 +521,48 @@ impl Wallet {
             .go_online(skip_consistency_check, indexer_url)
     }
 
+    fn inflate(
+        &self,
+        online: Online,
+        asset_id: String,
+        inflation_amounts: Vec<u64>,
+        fee_rate: u64,
+        min_confirmations: u8,
+    ) -> Result<OperationResult, RgbLibError> {
+        self._get_wallet().inflate(
+            online,
+            asset_id,
+            inflation_amounts,
+            fee_rate,
+            min_confirmations,
+        )
+    }
+
+    fn inflate_begin(
+        &self,
+        online: Online,
+        asset_id: String,
+        inflation_amounts: Vec<u64>,
+        fee_rate: u64,
+        min_confirmations: u8,
+    ) -> Result<String, RgbLibError> {
+        self._get_wallet().inflate_begin(
+            online,
+            asset_id,
+            inflation_amounts,
+            fee_rate,
+            min_confirmations,
+        )
+    }
+
+    fn inflate_end(
+        &self,
+        online: Online,
+        signed_psbt: String,
+    ) -> Result<OperationResult, RgbLibError> {
+        self._get_wallet().inflate_end(online, signed_psbt)
+    }
+
     fn issue_asset_nia(
         &self,
         ticker: String,
@@ -636,7 +678,7 @@ impl Wallet {
         fee_rate: u64,
         min_confirmations: u8,
         skip_sync: bool,
-    ) -> Result<SendResult, RgbLibError> {
+    ) -> Result<OperationResult, RgbLibError> {
         self._get_wallet().send(
             online,
             _convert_recipient_map(recipient_map),
@@ -669,7 +711,7 @@ impl Wallet {
         online: Online,
         signed_psbt: String,
         skip_sync: bool,
-    ) -> Result<SendResult, RgbLibError> {
+    ) -> Result<OperationResult, RgbLibError> {
         self._get_wallet().send_end(online, signed_psbt, skip_sync)
     }
 

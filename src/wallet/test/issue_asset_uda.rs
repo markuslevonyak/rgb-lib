@@ -42,7 +42,6 @@ fn success() {
     assert_eq!(asset_1.name, NAME.to_string());
     assert_eq!(asset_1.details, None);
     assert_eq!(asset_1.precision, PRECISION);
-    assert_eq!(asset_1.issued_supply, settled);
     assert_eq!(
         balance_1,
         Balance {

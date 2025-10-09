@@ -42,7 +42,7 @@ fn success() {
     assert_eq!(asset.name, NAME.to_string());
     assert_eq!(asset.details, None);
     assert_eq!(asset.precision, PRECISION);
-    assert_eq!(asset.issued_supply, AMOUNT * 2);
+    assert_eq!(asset.initial_supply, AMOUNT * 2);
     assert_eq!(
         balance,
         Balance {
@@ -87,7 +87,7 @@ fn noissue_someinflation() {
 
     // checks
     let balance = test_get_asset_balance(&wallet, &asset.asset_id);
-    assert_eq!(asset.issued_supply, 0);
+    assert_eq!(asset.initial_supply, 0);
     assert_eq!(
         balance,
         Balance {

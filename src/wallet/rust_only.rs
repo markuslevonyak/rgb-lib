@@ -498,12 +498,14 @@ impl Wallet {
         Ok(())
     }
 
+    #[cfg(any(feature = "electrum", feature = "esplora"))]
     pub(crate) fn save_new_asset_internal(
         &self,
         runtime: &RgbRuntime,
         contract_id: ContractId,
         asset_schema: AssetSchema,
         valid_contract: ValidContract,
+        valid_transfer: ValidTransfer,
     ) -> Result<(), Error> {
         let timestamp = valid_contract.genesis.timestamp;
         let (local_asset_data, token) = match &asset_schema {
@@ -514,7 +516,7 @@ impl Wallet {
                 let name = spec.name().to_string();
                 let details = spec.details().map(|d| d.to_string());
                 let precision = spec.precision.into();
-                let issued_supply = contract.total_issued_supply().into();
+                let initial_supply = contract.total_issued_supply().into();
                 let media_idx = if let Some(attachment) = contract.contract_terms().media {
                     Some(self.get_or_insert_media(
                         hex::encode(attachment.digest),
@@ -530,7 +532,9 @@ impl Wallet {
                         ticker: Some(ticker),
                         details,
                         media_idx,
-                        issued_supply,
+                        initial_supply,
+                        max_supply: None,
+                        known_circulating_supply: None,
                     },
                     None,
                 )
@@ -542,7 +546,7 @@ impl Wallet {
                 let name = spec.name().to_string();
                 let details = spec.details().map(|d| d.to_string());
                 let precision = spec.precision.into();
-                let issued_supply = 1;
+                let initial_supply = 1;
                 let token_full =
                     Token::from_token_data(&contract.token_data(), self.get_media_dir());
                 (
@@ -552,7 +556,9 @@ impl Wallet {
                         ticker: Some(ticker),
                         details,
                         media_idx: None,
-                        issued_supply,
+                        initial_supply,
+                        max_supply: None,
+                        known_circulating_supply: None,
                     },
                     Some(token_full),
                 )
@@ -562,7 +568,7 @@ impl Wallet {
                 let name = contract.name().to_string();
                 let details = contract.details().map(|d| d.to_string());
                 let precision = contract.precision().into();
-                let issued_supply = contract.total_issued_supply().into();
+                let initial_supply = contract.total_issued_supply().into();
                 let media_idx = if let Some(attachment) = contract.contract_terms().media {
                     Some(self.get_or_insert_media(
                         hex::encode(attachment.digest),
@@ -578,7 +584,9 @@ impl Wallet {
                         ticker: None,
                         details,
                         media_idx,
-                        issued_supply,
+                        initial_supply,
+                        max_supply: None,
+                        known_circulating_supply: None,
                     },
                     None,
                 )
@@ -590,7 +598,6 @@ impl Wallet {
                 let name = spec.name().to_string();
                 let details = spec.details().map(|d| d.to_string());
                 let precision = spec.precision.into();
-                let issued_supply = contract.total_issued_supply().into();
                 let media_idx = if let Some(attachment) = contract.contract_terms().media {
                     Some(self.get_or_insert_media(
                         hex::encode(attachment.digest),
@@ -599,6 +606,11 @@ impl Wallet {
                 } else {
                     None
                 };
+                let initial_supply = contract.total_issued_supply().into();
+                let max_supply = contract.max_supply().into();
+                let known_circulating_supply = IfaWrapper::with(valid_transfer.contract_data())
+                    .total_issued_supply()
+                    .into();
                 (
                     LocalAssetData {
                         name,
@@ -606,7 +618,9 @@ impl Wallet {
                         ticker: Some(ticker),
                         details,
                         media_idx,
-                        issued_supply,
+                        initial_supply,
+                        max_supply: Some(max_supply),
+                        known_circulating_supply: Some(known_circulating_supply),
                     },
                     None,
                 )
@@ -654,26 +668,43 @@ impl Wallet {
     ///
     /// <div class="warning">This method is meant for special usage and is normally not needed, use
     /// it only if you know what you're doing</div>
-    pub fn save_new_asset(&self, consignment: RgbTransfer) -> Result<(), Error> {
+    #[cfg(any(feature = "electrum", feature = "esplora"))]
+    pub fn save_new_asset(
+        &self,
+        consignment: RgbTransfer,
+        offchain_txid: String,
+    ) -> Result<(), Error> {
         info!(self.logger, "Saving new asset...");
         let runtime = self.rgb_runtime()?;
 
         let contract_id = consignment.contract_id();
 
+        let witness_id = RgbTxid::from_str(&offchain_txid).map_err(|_| Error::InvalidTxid)?;
+        let resolver = OffchainResolver {
+            witness_id,
+            consignment: &consignment,
+            fallback: self.blockchain_resolver(),
+        };
         let asset_schema: AssetSchema = consignment.schema_id().try_into()?;
         let trusted_typesystem = asset_schema.types();
-        let contract = consignment.into_contract();
         let validation_config = ValidationConfig {
             chain_net: self.chain_net(),
             trusted_typesystem,
             ..Default::default()
         };
-        let valid_contract = contract
+        let valid_transfer = consignment
             .clone()
-            .validate(&DumbResolver, &validation_config)
+            .validate(&resolver, &validation_config)
             .expect("valid consignment");
+        let valid_contract = valid_transfer.clone().into_valid_contract();
 
-        self.save_new_asset_internal(&runtime, contract_id, asset_schema, valid_contract)?;
+        self.save_new_asset_internal(
+            &runtime,
+            contract_id,
+            asset_schema,
+            valid_contract,
+            valid_transfer,
+        )?;
 
         self.update_backup_info(false)?;
 
