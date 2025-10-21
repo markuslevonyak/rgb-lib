@@ -328,13 +328,15 @@ pub(crate) fn get_test_coloring(wallet: &Wallet, asset_transfer_idx: i32) -> DbC
 }
 
 pub(crate) fn get_test_transfer_recipient(wallet: &Wallet, recipient_id: &str) -> DbTransfer {
-    wallet
+    let transfers = wallet
         .database
         .iter_transfers()
         .unwrap()
         .into_iter()
-        .find(|t| t.recipient_id == Some(recipient_id.to_string()))
-        .unwrap()
+        .filter(|t| t.recipient_id == Some(recipient_id.to_string()) && t.incoming)
+        .collect::<Vec<_>>();
+    assert_eq!(transfers.len(), 1);
+    transfers.first().cloned().unwrap()
 }
 
 pub(crate) fn get_test_transfer_sender(
