@@ -6006,8 +6006,6 @@ fn ifa() {
     show_unspent_colorings(&mut wallet, "after InflationRights move");
     // check asset allocations are still spendable (not selected as input)
     let balance = test_get_asset_balance(&wallet, &asset.asset_id);
-    // TODO Fungible allocation selected as input even though not needed, spendable goes to 0
-    dbg!(&balance);
     let expected_balance = Balance {
         settled: asset_total,
         future: asset_total,

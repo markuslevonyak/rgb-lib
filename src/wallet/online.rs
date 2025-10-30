@@ -2014,6 +2014,7 @@ impl Wallet {
         assignments_needed: AssignmentsCollection,
         unspents: Vec<LocalUnspent>,
     ) -> Result<AssetSpend, Error> {
+        // sort unspents by the sum of main amounts
         fn cmp_localunspent_allocation_sum(a: &LocalUnspent, b: &LocalUnspent) -> Ordering {
             let a_sum: u64 = a
                 .rgb_allocations
@@ -2027,25 +2028,84 @@ impl Wallet {
                 .sum();
             a_sum.cmp(&b_sum)
         }
+        // sort unspents by the sum of inflation right amounts
+        fn cmp_localunspent_inflation_sum(a: &LocalUnspent, b: &LocalUnspent) -> Ordering {
+            let a_sum: u64 = a
+                .rgb_allocations
+                .iter()
+                .map(|a| a.assignment.inflation_amount())
+                .sum();
+            let b_sum: u64 = b
+                .rgb_allocations
+                .iter()
+                .map(|a| a.assignment.inflation_amount())
+                .sum();
+            a_sum.cmp(&b_sum)
+        }
 
         debug!(self.logger, "Selecting inputs for asset '{}'...", asset_id);
         let mut input_allocations: HashMap<DbTxo, Vec<Assignment>> = HashMap::new();
 
         let mut mut_unspents = unspents;
+
+        // sort unspents first by inflation rights amount, then main amount
+        if assignments_needed.inflation > 0 {
+            mut_unspents.sort_by(cmp_localunspent_inflation_sum);
+        }
         if assignments_needed.fungible > 0 {
             mut_unspents.sort_by(cmp_localunspent_allocation_sum);
         }
 
         let mut assignments_collected = AssignmentsCollection::default();
         for unspent in mut_unspents {
+            // get spendable allocations for the required asset
             let asset_allocations: Vec<LocalRgbAllocation> = unspent
                 .rgb_allocations
                 .into_iter()
                 .filter(|a| a.asset_id == Some(asset_id.clone()) && a.status.settled())
                 .collect();
+
+            // skip UTXOs with no allocations
             if asset_allocations.is_empty() {
                 continue;
             }
+
+            // check if the unspent hosts any needed allocations
+            let mut needed = false;
+            if assignments_collected.fungible < assignments_needed.fungible
+                && asset_allocations
+                    .iter()
+                    .any(|a| matches!(a.assignment, Assignment::Fungible(_)))
+            {
+                needed = true;
+            }
+            if !assignments_collected.non_fungible & assignments_needed.non_fungible
+                && asset_allocations
+                    .iter()
+                    .any(|a| matches!(a.assignment, Assignment::NonFungible))
+            {
+                needed = true;
+            }
+            if assignments_collected.inflation < assignments_needed.inflation
+                && asset_allocations
+                    .iter()
+                    .any(|a| matches!(a.assignment, Assignment::InflationRight(_)))
+            {
+                needed = true;
+            }
+            if assignments_collected.replace < assignments_needed.replace
+                && asset_allocations
+                    .iter()
+                    .any(|a| matches!(a.assignment, Assignment::ReplaceRight))
+            {
+                needed = true;
+            }
+            // skip UTXOs with no needed allocations
+            if !needed {
+                continue;
+            }
+
+            // add selected allocations to collected assignments and input allocations
             asset_allocations
                 .iter()
                 .for_each(|a| a.assignment.add_to_assignments(&mut assignments_collected));
@@ -2056,6 +2116,8 @@ impl Wallet {
                     .map(|a| a.assignment.clone())
                     .collect(),
             );
+
+            // stop as soon as we have the needed assignments
             if assignments_collected.enough(&assignments_needed) {
                 break;
             }
