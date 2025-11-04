@@ -5954,6 +5954,88 @@ fn ifa() {
     assert!(send_fungible.change_utxo.is_some());
     assert!(send_inflation.change_utxo.is_some());
     assert!(send_replace.change_utxo.is_some());
+
+    // send all assets to another UTXO
+    show_unspent_colorings(&mut wallet, "before asset move");
+    let Balance {
+        settled: _,
+        future: _,
+        spendable: asset_total,
+    } = test_get_asset_balance(&wallet, &asset.asset_id);
+    let receive_data = test_blind_receive(&wallet);
+    let recipient_map = HashMap::from([(
+        asset.asset_id.clone(),
+        vec![Recipient {
+            assignment: Assignment::Fungible(asset_total),
+            recipient_id: receive_data.recipient_id.clone(),
+            witness_data: None,
+            transport_endpoints: TRANSPORT_ENDPOINTS.clone(),
+        }],
+    )]);
+    let txid = test_send(&mut wallet, &online, &recipient_map);
+    assert!(!txid.is_empty());
+    // settle the transfers
+    show_unspent_colorings(&mut wallet, "after asset send to oneself");
+    wait_for_refresh(&mut wallet, &online, None, None);
+    show_unspent_colorings(&mut wallet, "after asset send to oneself + refresh 1");
+    mine(false, false);
+    wait_for_refresh(&mut wallet, &online, None, None);
+
+    // send InflationRight only
+    show_unspent_colorings(&mut wallet, "before InflationRights move");
+    // settle the transfers
+    let unspents = test_list_unspents(&mut wallet, Some(&online), true);
+    let inflation_right_amount = unspents
+        .iter()
+        .flat_map(|u| u.rgb_allocations.clone())
+        .filter(|a| matches!(a.assignment, Assignment::InflationRight(_)))
+        .map(|a| a.assignment.inflation_amount())
+        .sum::<u64>();
+    let receive_data = test_blind_receive(&rcv_wallet);
+    let recipient_map = HashMap::from([(
+        asset.asset_id.clone(),
+        vec![Recipient {
+            assignment: Assignment::InflationRight(inflation_right_amount),
+            recipient_id: receive_data.recipient_id.clone(),
+            witness_data: None,
+            transport_endpoints: TRANSPORT_ENDPOINTS.clone(),
+        }],
+    )]);
+    let txid = test_send(&mut wallet, &online, &recipient_map);
+    assert!(!txid.is_empty());
+    show_unspent_colorings(&mut wallet, "after InflationRights move");
+    // check asset allocations are still spendable (not selected as input)
+    let balance = test_get_asset_balance(&wallet, &asset.asset_id);
+    // TODO Fungible allocation selected as input even though not needed, spendable goes to 0
+    dbg!(&balance);
+    let expected_balance = Balance {
+        settled: asset_total,
+        future: asset_total,
+        spendable: asset_total,
+    };
+    assert_eq!(balance, expected_balance);
+    wait_for_refresh(&mut rcv_wallet, &rcv_online, None, None);
+    wait_for_refresh(&mut wallet, &online, None, None);
+    mine(false, false);
+    wait_for_refresh(&mut rcv_wallet, &rcv_online, None, None);
+    wait_for_refresh(&mut wallet, &online, None, None);
+    show_unspent_colorings(&mut wallet, "after InflationRights move + refresh");
+    // check final balances
+    let balance = test_get_asset_balance(&wallet, &asset.asset_id);
+    let expected_balance = Balance {
+        settled: asset_total,
+        future: asset_total,
+        spendable: asset_total,
+    };
+    assert_eq!(balance, expected_balance);
+    let unspents = test_list_unspents(&mut wallet, Some(&online), true);
+    let inflation_right_amount = unspents
+        .iter()
+        .flat_map(|u| u.rgb_allocations.clone())
+        .filter(|a| matches!(a.assignment, Assignment::InflationRight(_)))
+        .map(|a| a.assignment.inflation_amount())
+        .sum::<u64>();
+    assert_eq!(inflation_right_amount, 0);
 }
 
 #[cfg(feature = "electrum")]
