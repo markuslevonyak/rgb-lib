@@ -124,3 +124,7 @@ esplora = [
     "rgb-ops/esplora_blocking",
 ]
 camel_case = ["default"]
+
+[profile.reldebug]
+inherits = "release"
+debug = 1
