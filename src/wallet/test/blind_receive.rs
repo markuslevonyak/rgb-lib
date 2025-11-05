@@ -811,9 +811,8 @@ fn invoice_new() {
     let invoice_data = invoice.invoice_data;
     assert_eq!(invoice_data.assignment, Assignment::InflationRight(amount));
 
-    // TODO are we sure about this?
-    // amount, invalid name
-    let invoice_str = format!("rgb:~/~/{amount_str}/{blinded}?assignment_name=invalid");
+    // amount, unknown name
+    let invoice_str = format!("rgb:~/~/{amount_str}/{blinded}?assignment_name=unknown");
     let invoice = Invoice::new(invoice_str.to_owned()).unwrap();
     let invoice_data = invoice.invoice_data;
     assert_eq!(invoice_data.assignment, Assignment::Any);
