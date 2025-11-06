@@ -2838,7 +2838,7 @@ impl Wallet {
     /// refreshing) to the [`TransferStatus::Settled`] status.
     ///
     /// Signing of the returned PSBT needs to be carried out separately. The signed PSBT then needs
-    /// to be fed to the [`send_end`](Wallet::send_end) function for broadcasting.
+    /// to be fed to the [`send_end`](Wallet::send_end) function to complete the send operation.
     ///
     /// This doesn't require the wallet to have private keys.
     ///
