@@ -2620,7 +2620,7 @@ impl Wallet {
     fn _save_transfers(
         &self,
         txid: String,
-        transfer_info_map: BTreeMap<String, InfoAssetTransfer>,
+        transfer_info_map: &BTreeMap<String, InfoAssetTransfer>,
         extra_allocations: HashMap<String, Vec<Assignment>>,
         change_utxo_idx: Option<i32>,
         btc_change: Option<BtcChange>,
@@ -2666,52 +2666,52 @@ impl Wallet {
         };
 
         for (asset_id, transfer_info) in transfer_info_map {
-            let asset_spend = transfer_info.asset_spend;
-            let change = transfer_info.change;
-            let recipients = transfer_info.recipients;
-
             let asset_transfer = DbAssetTransferActMod {
                 user_driven: ActiveValue::Set(true),
                 batch_transfer_idx: ActiveValue::Set(batch_transfer_idx),
-                asset_id: ActiveValue::Set(Some(asset_id)),
+                asset_id: ActiveValue::Set(Some(asset_id.clone())),
                 ..Default::default()
             };
             let asset_transfer_idx = self.database.set_asset_transfer(asset_transfer)?;
 
-            for (input_idx, (_, assignments)) in asset_spend.txo_map {
+            for (input_idx, (_, assignments)) in &transfer_info.asset_spend.txo_map {
                 for assignment in assignments {
                     let db_coloring = DbColoringActMod {
-                        txo_idx: ActiveValue::Set(input_idx),
+                        txo_idx: ActiveValue::Set(*input_idx),
                         asset_transfer_idx: ActiveValue::Set(asset_transfer_idx),
                         r#type: ActiveValue::Set(ColoringType::Input),
-                        assignment: ActiveValue::Set(assignment),
+                        assignment: ActiveValue::Set(assignment.clone()),
                         ..Default::default()
                     };
                     self.database.set_coloring(db_coloring)?;
                 }
             }
-            if change.fungible > 0 {
+            if transfer_info.change.fungible > 0 {
                 let db_coloring = DbColoringActMod {
                     txo_idx: ActiveValue::Set(change_utxo_idx.unwrap()),
                     asset_transfer_idx: ActiveValue::Set(asset_transfer_idx),
                     r#type: ActiveValue::Set(ColoringType::Change),
-                    assignment: ActiveValue::Set(Assignment::Fungible(change.fungible)),
+                    assignment: ActiveValue::Set(Assignment::Fungible(
+                        transfer_info.change.fungible,
+                    )),
                     ..Default::default()
                 };
                 self.database.set_coloring(db_coloring)?;
             }
-            if change.inflation > 0 {
+            if transfer_info.change.inflation > 0 {
                 let db_coloring = DbColoringActMod {
                     txo_idx: ActiveValue::Set(change_utxo_idx.unwrap()),
                     asset_transfer_idx: ActiveValue::Set(asset_transfer_idx),
                     r#type: ActiveValue::Set(ColoringType::Change),
-                    assignment: ActiveValue::Set(Assignment::InflationRight(change.inflation)),
+                    assignment: ActiveValue::Set(Assignment::InflationRight(
+                        transfer_info.change.inflation,
+                    )),
                     ..Default::default()
                 };
                 self.database.set_coloring(db_coloring)?;
             }
-            if change.replace > 0 {
-                for _ in 0..change.replace {
+            if transfer_info.change.replace > 0 {
+                for _ in 0..transfer_info.change.replace {
                     let db_coloring = DbColoringActMod {
                         txo_idx: ActiveValue::Set(change_utxo_idx.unwrap()),
                         asset_transfer_idx: ActiveValue::Set(asset_transfer_idx),
@@ -2723,7 +2723,7 @@ impl Wallet {
                 }
             }
 
-            for recipient in recipients.clone() {
+            for recipient in transfer_info.recipients.clone() {
                 let transfer = DbTransferActMod {
                     asset_transfer_idx: ActiveValue::Set(asset_transfer_idx),
                     requested_assignment: ActiveValue::Set(Some(recipient.assignment)),
@@ -3150,7 +3150,7 @@ impl Wallet {
         };
         let batch_transfer_idx = self._save_transfers(
             txid.clone(),
-            transfer_info_map,
+            &transfer_info_map,
             info_contents.extra_allocations,
             info_contents.change_utxo_idx,
             info_contents.btc_change,
