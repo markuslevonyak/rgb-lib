@@ -1405,13 +1405,31 @@ impl Wallet {
         let consignment_path = self.get_receive_consignment_path(&recipient_id);
         let transfer_dir = consignment_path.parent().unwrap();
         fs::create_dir_all(transfer_dir)?;
-        let consignment_bytes = general_purpose::STANDARD
-            .decode(consignment)
-            .map_err(InternalError::from)?;
+        let consignment_bytes = match general_purpose::STANDARD.decode(consignment) {
+            Ok(b) => b,
+            Err(e) => {
+                error!(self.logger, "Failed to decode consignment bytes: {e}");
+                return self._refuse_consignment(
+                    proxy_url,
+                    recipient_id,
+                    &mut updated_batch_transfer,
+                );
+            }
+        };
         fs::write(consignment_path.clone(), consignment_bytes).expect("Unable to write file");
 
         let mut runtime = self.rgb_runtime()?;
-        let consignment = RgbTransfer::load_file(consignment_path).map_err(InternalError::from)?;
+        let consignment = match RgbTransfer::load_file(consignment_path) {
+            Ok(c) => c,
+            Err(e) => {
+                error!(self.logger, "Failed to load consignment file: {e}");
+                return self._refuse_consignment(
+                    proxy_url,
+                    recipient_id,
+                    &mut updated_batch_transfer,
+                );
+            }
+        };
         let contract_id = consignment.contract_id();
         let asset_id = contract_id.to_string();
 
