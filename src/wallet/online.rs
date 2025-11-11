@@ -1217,11 +1217,22 @@ impl Wallet {
             self.logger,
             "Refusing invalid consignment for {recipient_id}"
         );
-        let nack_res = self
+        match self
             .rest_client
             .clone()
-            .post_ack(&proxy_url, recipient_id, false)?;
-        debug!(self.logger, "Consignment NACK response: {:?}", nack_res);
+            .post_ack(&proxy_url, recipient_id, false)
+        {
+            Ok(r) => {
+                debug!(self.logger, "Consignment NACK response: {:?}", r);
+            }
+            Err(e) if e.to_string().contains("Cannot change ACK") => {
+                warn!(self.logger, "Found an ACK when trying NACK");
+            }
+            Err(e) => {
+                error!(self.logger, "Failed to post NACK: {e}");
+                return Err(e);
+            }
+        };
         updated_batch_transfer.status = ActiveValue::Set(TransferStatus::Failed);
         Ok(Some(
             self.database
@@ -1693,11 +1704,22 @@ impl Wallet {
             "Consignment is valid. Received '{:?}' of contract '{}'", assignments, asset_id
         );
 
-        let ack_res = self
+        match self
             .rest_client
             .clone()
-            .post_ack(&proxy_url, recipient_id, true)?;
-        debug!(self.logger, "Consignment ACK response: {:?}", ack_res);
+            .post_ack(&proxy_url, recipient_id, true)
+        {
+            Ok(r) => {
+                debug!(self.logger, "Consignment ACK response: {:?}", r);
+            }
+            Err(e) if e.to_string().contains("Cannot change ACK") => {
+                warn!(self.logger, "Found an NACK when trying ACK");
+            }
+            Err(e) => {
+                error!(self.logger, "Failed to post ACK: {e}");
+                return Err(e);
+            }
+        };
 
         let utxo_idx = match transfer.recipient_type {
             Some(RecipientTypeFull::Blind { ref unblinded_utxo }) => {
