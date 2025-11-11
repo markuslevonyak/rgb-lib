@@ -107,7 +107,7 @@ impl AssignmentsCollection {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct AssetSpend {
-    txo_map: HashMap<i32, (Outpoint, Vec<Assignment>)>,
+    txo_map: HashMap<i32, Outpoint>,
     assignments_collected: AssignmentsCollection,
     assignments_needed: AssignmentsCollection,
 }
@@ -128,11 +128,14 @@ struct BtcChange {
     amount: u64,
 }
 
+// map txo idx to assignments
+type TxoAssignments = HashMap<i32, Vec<Assignment>>;
+
 #[derive(Debug, Deserialize, Serialize)]
 struct InfoBatchTransfer {
     btc_change: Option<BtcChange>,
     change_utxo_idx: Option<i32>,
-    extra_allocations: HashMap<String, Vec<Assignment>>,
+    extra_allocations: HashMap<String, TxoAssignments>,
     donation: bool,
     min_confirmations: u8,
 }
@@ -142,6 +145,7 @@ struct InfoAssetTransfer {
     recipients: Vec<LocalRecipient>,
     asset_spend: AssetSpend,
     change: AssignmentsCollection,
+    assignments_spent: TxoAssignments,
 }
 
 #[non_exhaustive]
@@ -2132,7 +2136,7 @@ impl Wallet {
         }
 
         debug!(self.logger, "Selecting inputs for asset '{}'...", asset_id);
-        let mut input_allocations: HashMap<DbTxo, Vec<Assignment>> = HashMap::new();
+        let mut txo_map: HashMap<i32, Outpoint> = HashMap::new();
 
         let mut mut_unspents = unspents;
 
@@ -2193,17 +2197,11 @@ impl Wallet {
                 continue;
             }
 
-            // add selected allocations to collected assignments and input allocations
+            // add selected allocations to collected assignments
             asset_allocations
                 .iter()
                 .for_each(|a| a.assignment.add_to_assignments(&mut assignments_collected));
-            input_allocations.insert(
-                unspent.utxo,
-                asset_allocations
-                    .iter()
-                    .map(|a| a.assignment.clone())
-                    .collect(),
-            );
+            txo_map.insert(unspent.utxo.idx, unspent.utxo.outpoint());
 
             // stop as soon as we have the needed assignments
             if assignments_collected.enough(&assignments_needed) {
@@ -2221,10 +2219,6 @@ impl Wallet {
             self.logger,
             "Asset input assignments {:?}", assignments_collected
         );
-        let txo_map: HashMap<i32, (Outpoint, Vec<Assignment>)> = input_allocations
-            .into_iter()
-            .map(|(k, v)| (k.idx, (k.outpoint(), v)))
-            .collect();
         Ok(AssetSpend {
             txo_map,
             assignments_collected,
@@ -2382,8 +2376,7 @@ impl Wallet {
 
         let mut all_transitions: HashMap<ContractId, Vec<Transition>> = HashMap::new();
         let mut asset_beneficiaries = bmap![];
-        let mut main_assets_extras: HashMap<ContractId, HashMap<Opout, AllocatedState>> =
-            HashMap::new();
+        let mut extra_state = HashMap::<ContractId, Vec<(i32, Opout, AllocatedState)>>::new();
         for (asset_id, transfer_info) in transfer_info_map.iter_mut() {
             let contract_id = ContractId::from_str(asset_id).expect("invalid contract ID");
 
@@ -2391,16 +2384,22 @@ impl Wallet {
                 .asset_spend
                 .txo_map
                 .values()
-                .map(|(o, _)| RgbOutpoint::from(o.clone()));
+                .map(|o| RgbOutpoint::from(o.clone()));
             let mut all_opout_state_vec = Vec::new();
-            for (_explicit_seal, opout_state_map) in
+            for (explicit_seal, opout_state_map) in
                 runtime.contract_assignments_for(contract_id, asset_utxos.clone())?
             {
-                all_opout_state_vec.extend(opout_state_map.into_iter());
+                let txo_idx = self
+                    .database
+                    .get_txo(&explicit_seal.to_outpoint().into())?
+                    .expect("outpoint should be in the DB")
+                    .idx;
+                all_opout_state_vec
+                    .extend(opout_state_map.into_iter().map(|(o, s)| (txo_idx, o, s)));
             }
 
             // sort by state globally (smaller to bigger)
-            all_opout_state_vec.sort_by_key(|(_, state)| match state {
+            all_opout_state_vec.sort_by_key(|(_, _, state)| match state {
                 AllocatedState::Amount(amt) => amt.as_u64(),
                 _ => 0, // non-amount states sorted first
             });
@@ -2409,21 +2408,27 @@ impl Wallet {
             let mut uda_state = None;
             let mut asset_transition_builder =
                 runtime.transition_builder(contract_id, "transfer")?;
-            for (opout, state) in all_opout_state_vec {
+            for (txo_idx, opout, state) in all_opout_state_vec {
                 let should_add_as_input = inputs_added.opout_contributes(
                     &opout,
                     &state,
                     &transfer_info.asset_spend.assignments_needed,
                 );
                 if !should_add_as_input {
-                    main_assets_extras
-                        .entry(contract_id)
-                        .or_default()
-                        .insert(opout, state.clone());
+                    extra_state.entry(contract_id).or_default().push((
+                        txo_idx,
+                        opout,
+                        state.clone(),
+                    ));
                     continue;
                 }
 
                 inputs_added.add_opout_state(&opout, &state);
+                transfer_info
+                    .assignments_spent
+                    .entry(txo_idx)
+                    .or_default()
+                    .push(Assignment::from_opout_and_state(opout, &state));
                 // there can be only a single state when contract is UDA
                 uda_state = Some(state.clone());
                 asset_transition_builder = asset_transition_builder.add_input(opout, state)?;
@@ -2528,23 +2533,26 @@ impl Wallet {
             fs::write(info_file, serialized_info)?;
         }
 
-        let mut extra_state = HashMap::<ContractId, HashMap<Opout, AllocatedState>>::new();
-        extra_state.extend(main_assets_extras);
         for id in runtime.contracts_assigning(prev_outputs.clone())? {
             if transfer_info_map.contains_key(&id.to_string()) {
                 continue;
             }
             let state = runtime.contract_assignments_for(id, prev_outputs.clone())?;
             let entry = extra_state.entry(id).or_default();
-            for (_explicit_seal, opout_state_map) in state {
-                entry.extend(opout_state_map);
+            for (explicit_seal, opout_state_map) in state {
+                let txo_idx = self
+                    .database
+                    .get_txo(&explicit_seal.to_outpoint().into())?
+                    .expect("outpoint should be in the DB")
+                    .idx;
+                entry.extend(opout_state_map.into_iter().map(|(o, s)| (txo_idx, o, s)));
             }
         }
 
-        let mut extra_allocations: HashMap<String, Vec<Assignment>> = HashMap::new();
+        let mut extra_allocations: HashMap<String, TxoAssignments> = HashMap::new();
         for (cid, opout_state_map) in extra_state {
             let schema = runtime.contract_schema(cid)?;
-            for (opout, state) in opout_state_map {
+            for (txo_idx, opout, state) in opout_state_map {
                 let transition_type = schema.default_transition_for_assignment(&opout.ty);
                 let mut extra_builder = runtime.transition_builder_raw(cid, transition_type)?;
                 let assignment = Assignment::from_opout_and_state(opout, &state);
@@ -2565,6 +2573,8 @@ impl Wallet {
                     .push(extra_transition.clone());
                 extra_allocations
                     .entry(cid.to_string())
+                    .or_default()
+                    .entry(txo_idx)
                     .or_default()
                     .push(assignment);
                 rgb_psbt
@@ -2730,7 +2740,7 @@ impl Wallet {
         &self,
         txid: String,
         transfer_info_map: &BTreeMap<String, InfoAssetTransfer>,
-        extra_allocations: HashMap<String, Vec<Assignment>>,
+        extra_allocations: HashMap<String, TxoAssignments>,
         change_utxo_idx: Option<i32>,
         btc_change: Option<BtcChange>,
         status: TransferStatus,
@@ -2783,7 +2793,7 @@ impl Wallet {
             };
             let asset_transfer_idx = self.database.set_asset_transfer(asset_transfer)?;
 
-            for (input_idx, (_, assignments)) in &transfer_info.asset_spend.txo_map {
+            for (input_idx, assignments) in &transfer_info.assignments_spent {
                 for assignment in assignments {
                     let db_coloring = DbColoringActMod {
                         txo_idx: ActiveValue::Set(*input_idx),
@@ -2847,7 +2857,7 @@ impl Wallet {
             }
         }
 
-        for (asset_id, assignments) in extra_allocations {
+        for (asset_id, txo_assignments) in extra_allocations {
             let asset_transfer = DbAssetTransferActMod {
                 user_driven: ActiveValue::Set(false),
                 batch_transfer_idx: ActiveValue::Set(batch_transfer_idx),
@@ -2855,15 +2865,25 @@ impl Wallet {
                 ..Default::default()
             };
             let asset_transfer_idx = self.database.set_asset_transfer(asset_transfer)?;
-            for assignment in assignments {
-                let db_coloring = DbColoringActMod {
-                    txo_idx: ActiveValue::Set(change_utxo_idx.unwrap()),
-                    asset_transfer_idx: ActiveValue::Set(asset_transfer_idx),
-                    r#type: ActiveValue::Set(ColoringType::Change),
-                    assignment: ActiveValue::Set(assignment),
-                    ..Default::default()
-                };
-                self.database.set_coloring(db_coloring)?;
+            for (input_idx, assignments) in txo_assignments {
+                for assignment in assignments {
+                    let db_coloring = DbColoringActMod {
+                        txo_idx: ActiveValue::Set(input_idx),
+                        asset_transfer_idx: ActiveValue::Set(asset_transfer_idx),
+                        r#type: ActiveValue::Set(ColoringType::Input),
+                        assignment: ActiveValue::Set(assignment.clone()),
+                        ..Default::default()
+                    };
+                    self.database.set_coloring(db_coloring)?;
+                    let db_coloring = DbColoringActMod {
+                        txo_idx: ActiveValue::Set(change_utxo_idx.unwrap()),
+                        asset_transfer_idx: ActiveValue::Set(asset_transfer_idx),
+                        r#type: ActiveValue::Set(ColoringType::Change),
+                        assignment: ActiveValue::Set(assignment),
+                        ..Default::default()
+                    };
+                    self.database.set_coloring(db_coloring)?;
+                }
             }
         }
 
@@ -3114,6 +3134,7 @@ impl Wallet {
                 recipients: local_recipients.clone(),
                 asset_spend,
                 change: AssignmentsCollection::default(),
+                assignments_spent: HashMap::new(),
             };
             transfer_info_map.insert(asset_id.clone(), transfer_info);
         }
@@ -3121,12 +3142,7 @@ impl Wallet {
         // prepare BDK PSBT
         let mut all_inputs: HashSet<BdkOutPoint> = transfer_info_map
             .values()
-            .flat_map(|ti| {
-                ti.asset_spend
-                    .txo_map
-                    .values()
-                    .map(|(o, _)| o.clone().into())
-            })
+            .flat_map(|ti| ti.asset_spend.txo_map.values().map(|o| o.clone().into()))
             .collect();
         let (mut psbt, btc_change) = self._try_prepare_psbt(
             &input_unspents,

@@ -319,16 +319,14 @@ pub(crate) fn get_test_asset_transfer(wallet: &Wallet, batch_transfer_idx: i32) 
     user_driven_transfers.first().unwrap().clone()
 }
 
-pub(crate) fn get_test_coloring(wallet: &Wallet, asset_transfer_idx: i32) -> DbColoring {
-    let colorings: Vec<DbColoring> = wallet
+pub(crate) fn get_test_colorings(wallet: &Wallet, asset_transfer_idx: i32) -> Vec<DbColoring> {
+    wallet
         .database
         .iter_colorings()
         .unwrap()
         .into_iter()
         .filter(|c| c.asset_transfer_idx == asset_transfer_idx)
-        .collect();
-    assert_eq!(colorings.len(), 1);
-    colorings.first().unwrap().clone()
+        .collect()
 }
 
 pub(crate) fn get_test_transfer_recipient(wallet: &Wallet, recipient_id: &str) -> DbTransfer {

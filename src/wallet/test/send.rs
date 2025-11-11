@@ -3307,8 +3307,19 @@ fn cfa_extra_success() {
     assert!(asset_transfer_1.user_driven);
     let asset_transfer_2 = &asset_transfers[1];
     assert!(!asset_transfer_2.user_driven);
-    let extra_coloring = get_test_coloring(&wallet, asset_transfer_2.idx);
-    assert_eq!(extra_coloring.assignment, Assignment::Fungible(amount));
+    let extra_colorings = get_test_colorings(&wallet, asset_transfer_2.idx);
+    let extra_coloring_input = &extra_colorings[0];
+    let extra_coloring_change = &extra_colorings[1];
+    assert_eq!(extra_coloring_input.r#type, ColoringType::Input);
+    assert_eq!(
+        extra_coloring_input.assignment,
+        Assignment::Fungible(amount)
+    );
+    assert_eq!(extra_coloring_change.r#type, ColoringType::Change);
+    assert_eq!(
+        extra_coloring_change.assignment,
+        Assignment::Fungible(amount)
+    );
 }
 
 #[cfg(feature = "electrum")]
@@ -3353,8 +3364,13 @@ fn uda_extra_success() {
     assert!(asset_transfer_1.user_driven);
     let asset_transfer_2 = &asset_transfers[1];
     assert!(!asset_transfer_2.user_driven);
-    let extra_coloring = get_test_coloring(&wallet, asset_transfer_2.idx);
-    assert_eq!(extra_coloring.assignment, Assignment::NonFungible);
+    let extra_colorings = get_test_colorings(&wallet, asset_transfer_2.idx);
+    let extra_coloring_input = &extra_colorings[0];
+    let extra_coloring_change = &extra_colorings[1];
+    assert_eq!(extra_coloring_input.r#type, ColoringType::Input);
+    assert_eq!(extra_coloring_input.assignment, Assignment::NonFungible);
+    assert_eq!(extra_coloring_change.r#type, ColoringType::Change);
+    assert_eq!(extra_coloring_change.assignment, Assignment::NonFungible);
 }
 
 #[cfg(feature = "electrum")]
