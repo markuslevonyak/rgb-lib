@@ -141,7 +141,13 @@ struct InfoBatchTransfer {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+struct AssetInfo {
+    contract_id: ContractId,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 struct InfoAssetTransfer {
+    asset_info: AssetInfo,
     recipients: Vec<LocalRecipient>,
     asset_spend: AssetSpend,
     change: AssignmentsCollection,
@@ -2378,17 +2384,16 @@ impl Wallet {
         let mut asset_beneficiaries = bmap![];
         let mut extra_state = HashMap::<ContractId, Vec<(i32, Opout, AllocatedState)>>::new();
         for (asset_id, transfer_info) in transfer_info_map.iter_mut() {
-            let contract_id = ContractId::from_str(asset_id).expect("invalid contract ID");
-
             let asset_utxos = transfer_info
                 .asset_spend
                 .txo_map
                 .values()
                 .map(|o| RgbOutpoint::from(o.clone()));
             let mut all_opout_state_vec = Vec::new();
-            for (explicit_seal, opout_state_map) in
-                runtime.contract_assignments_for(contract_id, asset_utxos.clone())?
-            {
+            for (explicit_seal, opout_state_map) in runtime.contract_assignments_for(
+                transfer_info.asset_info.contract_id,
+                asset_utxos.clone(),
+            )? {
                 let txo_idx = self
                     .database
                     .get_txo(&explicit_seal.to_outpoint().into())?
@@ -2407,7 +2412,7 @@ impl Wallet {
             let mut inputs_added = AssignmentsCollection::default();
             let mut uda_state = None;
             let mut asset_transition_builder =
-                runtime.transition_builder(contract_id, "transfer")?;
+                runtime.transition_builder(transfer_info.asset_info.contract_id, "transfer")?;
             for (txo_idx, opout, state) in all_opout_state_vec {
                 let should_add_as_input = inputs_added.opout_contributes(
                     &opout,
@@ -2415,11 +2420,10 @@ impl Wallet {
                     &transfer_info.asset_spend.assignments_needed,
                 );
                 if !should_add_as_input {
-                    extra_state.entry(contract_id).or_default().push((
-                        txo_idx,
-                        opout,
-                        state.clone(),
-                    ));
+                    extra_state
+                        .entry(transfer_info.asset_info.contract_id)
+                        .or_default()
+                        .push((txo_idx, opout, state.clone()));
                     continue;
                 }
 
@@ -2512,7 +2516,7 @@ impl Wallet {
 
             let transition = asset_transition_builder.complete_transition()?;
             all_transitions
-                .entry(contract_id)
+                .entry(transfer_info.asset_info.contract_id)
                 .or_default()
                 .push(transition.clone());
             rgb_psbt
@@ -2619,9 +2623,8 @@ impl Wallet {
 
         runtime.consume_fascia(fascia, witness_txid, None)?;
 
-        for (asset_id, _transfer_info) in transfer_info_map {
+        for (asset_id, transfer_info) in transfer_info_map {
             let asset_transfer_dir = self.get_asset_transfer_dir(&transfer_dir, &asset_id);
-            let contract_id = ContractId::from_str(&asset_id).expect("invalid contract ID");
             let beneficiaries = asset_beneficiaries[&asset_id].clone();
             let mut beneficiaries_witness = vec![];
             let mut beneficiaries_blinded = vec![];
@@ -2637,7 +2640,7 @@ impl Wallet {
                 }
             }
             let consignment = runtime.transfer(
-                contract_id,
+                transfer_info.asset_info.contract_id,
                 beneficiaries_witness,
                 beneficiaries_blinded,
                 Some(witness_txid),
@@ -3025,10 +3028,13 @@ impl Wallet {
         let mut witness_recipients: Vec<(ScriptBuf, u64)> = vec![];
         let mut recipient_vout = 1;
         let mut transfer_info_map: BTreeMap<String, InfoAssetTransfer> = BTreeMap::new();
-        for (asset_id, recipients) in recipient_map {
+        let mut assets_data: BTreeMap<String, AssetInfo> = BTreeMap::new();
+        for (asset_id, recipients) in &recipient_map {
             let asset = self.database.check_asset_exists(asset_id.clone())?;
             let schema = asset.schema;
             self.check_schema_support(&schema)?;
+            let contract_id = ContractId::from_str(asset_id).expect("invalid contract ID");
+            assets_data.insert(asset_id.clone(), AssetInfo { contract_id });
 
             let mut local_recipients: Vec<LocalRecipient> = vec![];
             for recipient in recipients.clone() {
@@ -3131,6 +3137,7 @@ impl Wallet {
                 input_unspents.clone(),
             )?;
             let transfer_info = InfoAssetTransfer {
+                asset_info: assets_data.get(asset_id).unwrap().clone(),
                 recipients: local_recipients.clone(),
                 asset_spend,
                 change: AssignmentsCollection::default(),
