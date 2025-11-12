@@ -2439,9 +2439,9 @@ impl Wallet {
             }
 
             let mut beneficiaries = vec![];
-            for recipient in transfer_info.recipients.clone() {
-                let seal: BuilderSeal<GraphSeal> = match recipient.local_recipient_data {
-                    LocalRecipientData::Blind(secret_seal) => BuilderSeal::Concealed(secret_seal),
+            for recipient in &transfer_info.recipients {
+                let seal: BuilderSeal<GraphSeal> = match &recipient.local_recipient_data {
+                    LocalRecipientData::Blind(secret_seal) => BuilderSeal::Concealed(*secret_seal),
                     LocalRecipientData::Witness(witness_data) => {
                         let graph_seal = if let Some(blinding) = witness_data.blinding {
                             GraphSeal::with_blinded_vout(witness_data.vout, blinding)
@@ -2454,12 +2454,12 @@ impl Wallet {
 
                 beneficiaries.push(seal);
 
-                match recipient.assignment {
+                match &recipient.assignment {
                     Assignment::Fungible(amt) => {
                         asset_transition_builder = asset_transition_builder.add_fungible_state(
                             RGB_STATE_ASSET_OWNER,
                             seal,
-                            amt,
+                            *amt,
                         )?;
                     }
                     Assignment::NonFungible => {
@@ -2473,7 +2473,7 @@ impl Wallet {
                         asset_transition_builder = asset_transition_builder.add_fungible_state(
                             RGB_STATE_INFLATION_ALLOWANCE,
                             seal,
-                            amt,
+                            *amt,
                         )?;
                     }
                     Assignment::ReplaceRight => {
@@ -2625,22 +2625,24 @@ impl Wallet {
 
         runtime.consume_fascia(fascia, witness_txid, None)?;
 
-        for (asset_id, transfer_info) in transfer_info_map {
-            let asset_transfer_dir = self.get_asset_transfer_dir(&transfer_dir, &asset_id);
-            let beneficiaries = asset_beneficiaries[&asset_id].clone();
-            let mut beneficiaries_witness = vec![];
-            let mut beneficiaries_blinded = vec![];
-            for builder_seal in beneficiaries {
-                match builder_seal {
-                    BuilderSeal::Revealed(seal) => {
-                        let explicit_seal = ExplicitSeal::with(witness_txid, seal.vout);
-                        beneficiaries_witness.push(explicit_seal);
+        for (asset_id, transfer_info) in &transfer_info_map {
+            let asset_transfer_dir = self.get_asset_transfer_dir(&transfer_dir, asset_id);
+            let beneficiaries = asset_beneficiaries[asset_id].clone();
+            let (beneficiaries_witness, beneficiaries_blinded) = beneficiaries.into_iter().fold(
+                (Vec::new(), Vec::new()),
+                |(mut witness, mut blinded), builder_seal| {
+                    match builder_seal {
+                        BuilderSeal::Revealed(seal) => {
+                            let explicit_seal = ExplicitSeal::with(witness_txid, seal.vout);
+                            witness.push(explicit_seal);
+                        }
+                        BuilderSeal::Concealed(secret_seal) => {
+                            blinded.push(secret_seal);
+                        }
                     }
-                    BuilderSeal::Concealed(secret_seal) => {
-                        beneficiaries_blinded.push(secret_seal);
-                    }
-                }
-            }
+                    (witness, blinded)
+                },
+            );
             let consignment = runtime.transfer(
                 transfer_info.asset_info.contract_id,
                 beneficiaries_witness,
