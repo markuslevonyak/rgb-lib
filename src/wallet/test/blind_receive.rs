@@ -175,7 +175,10 @@ fn success() {
     let invoice = Invoice::new(receive_data.invoice).unwrap();
     let invoice_data = invoice.invoice_data();
     assert_eq!(invoice_data.assignment, Assignment::Fungible(amount));
-    assert_eq!(invoice_data.assignment_name, Some(s!("assetOwner")));
+    assert_eq!(
+        invoice_data.assignment_name,
+        Some(RGB_STATE_ASSET_OWNER.to_string())
+    );
     let transfer = get_test_transfer_recipient(&wallet, &receive_data.recipient_id);
     assert_eq!(
         transfer.requested_assignment,
@@ -195,7 +198,10 @@ fn success() {
     let invoice = Invoice::new(receive_data.invoice).unwrap();
     let invoice_data = invoice.invoice_data();
     assert_eq!(invoice_data.assignment, Assignment::Fungible(amount));
-    assert_eq!(invoice_data.assignment_name, Some(s!("assetOwner")));
+    assert_eq!(
+        invoice_data.assignment_name,
+        Some(RGB_STATE_ASSET_OWNER.to_string())
+    );
     let transfer = get_test_transfer_recipient(&wallet, &receive_data.recipient_id);
     assert_eq!(
         transfer.requested_assignment,
@@ -215,7 +221,10 @@ fn success() {
     let invoice = Invoice::new(receive_data.invoice).unwrap();
     let invoice_data = invoice.invoice_data();
     assert_eq!(invoice_data.assignment, Assignment::Fungible(0));
-    assert_eq!(invoice_data.assignment_name, Some(s!("assetOwner")));
+    assert_eq!(
+        invoice_data.assignment_name,
+        Some(RGB_STATE_ASSET_OWNER.to_string())
+    );
     let transfer = get_test_transfer_recipient(&wallet, &receive_data.recipient_id);
     assert_eq!(transfer.requested_assignment, Some(Assignment::Fungible(0)));
 
@@ -232,7 +241,10 @@ fn success() {
     let invoice = Invoice::new(receive_data.invoice).unwrap();
     let invoice_data = invoice.invoice_data();
     assert_eq!(invoice_data.assignment, Assignment::NonFungible);
-    assert_eq!(invoice_data.assignment_name, Some(s!("assetOwner")));
+    assert_eq!(
+        invoice_data.assignment_name,
+        Some(RGB_STATE_ASSET_OWNER.to_string())
+    );
     let transfer = get_test_transfer_recipient(&wallet, &receive_data.recipient_id);
     assert_eq!(transfer.requested_assignment, Some(Assignment::NonFungible));
 
@@ -249,7 +261,10 @@ fn success() {
     let invoice = Invoice::new(receive_data.invoice).unwrap();
     let invoice_data = invoice.invoice_data();
     assert_eq!(invoice_data.assignment, Assignment::NonFungible);
-    assert_eq!(invoice_data.assignment_name, Some(s!("assetOwner")));
+    assert_eq!(
+        invoice_data.assignment_name,
+        Some(RGB_STATE_ASSET_OWNER.to_string())
+    );
     let transfer = get_test_transfer_recipient(&wallet, &receive_data.recipient_id);
     assert_eq!(transfer.requested_assignment, Some(Assignment::NonFungible));
 
@@ -266,7 +281,10 @@ fn success() {
     let invoice = Invoice::new(receive_data.invoice).unwrap();
     let invoice_data = invoice.invoice_data();
     assert_eq!(invoice_data.assignment, Assignment::ReplaceRight);
-    assert_eq!(invoice_data.assignment_name, Some(s!("replaceRight")));
+    assert_eq!(
+        invoice_data.assignment_name,
+        Some(RGB_STATE_REPLACE_RIGHT.to_string())
+    );
     let transfer = get_test_transfer_recipient(&wallet, &receive_data.recipient_id);
     assert_eq!(
         transfer.requested_assignment,
@@ -286,7 +304,10 @@ fn success() {
     let invoice = Invoice::new(receive_data.invoice).unwrap();
     let invoice_data = invoice.invoice_data();
     assert_eq!(invoice_data.assignment, Assignment::InflationRight(amount));
-    assert_eq!(invoice_data.assignment_name, Some(s!("inflationAllowance")));
+    assert_eq!(
+        invoice_data.assignment_name,
+        Some(RGB_STATE_INFLATION_ALLOWANCE.to_string())
+    );
     let transfer = get_test_transfer_recipient(&wallet, &receive_data.recipient_id);
     assert_eq!(
         transfer.requested_assignment,

@@ -28,6 +28,11 @@ pub(crate) const CONSIGNMENT_FILE: &str = "consignment_out";
 
 const CONSIGNMENT_RCV_FILE: &str = "rcv_compose.rgbc";
 
+pub(crate) const RGB_STATE_ASSET_OWNER: &str = "assetOwner";
+pub(crate) const RGB_STATE_INFLATION_ALLOWANCE: &str = "inflationAllowance";
+pub(crate) const RGB_STATE_REPLACE_RIGHT: &str = "replaceRight";
+pub(crate) const RGB_GLOBAL_ISSUED_SUPPLY: &str = "issuedSupply";
+
 pub(crate) const SCHEMA_ID_NIA: &str =
     "rgb:sch:RWhwUfTMpuP2Zfx1~j4nswCANGeJrYOqDcKelaMV4zU#remote-digital-pegasus";
 pub(crate) const SCHEMA_ID_UDA: &str =
@@ -693,15 +698,19 @@ impl Invoice {
         let assignment_name = decoded.assignment_name.map(|a| a.to_string());
         let assignment = match asset_schema {
             None => match (decoded.assignment_state, assignment_name.as_deref()) {
-                (Some(InvoiceState::Amount(v)), Some("assetOwner")) => {
+                (Some(InvoiceState::Amount(v)), Some(RGB_STATE_ASSET_OWNER)) => {
                     Assignment::Fungible(v.value())
                 }
-                (Some(InvoiceState::Amount(v)), Some("inflationAllowance")) => {
+                (Some(InvoiceState::Amount(v)), Some(RGB_STATE_INFLATION_ALLOWANCE)) => {
                     Assignment::InflationRight(v.value())
                 }
                 (Some(InvoiceState::Amount(_)), _) => Assignment::Any,
-                (Some(InvoiceState::Data(_)), Some("assetOwner") | None) => Assignment::NonFungible,
-                (Some(InvoiceState::Void), Some("replaceRight") | None) => Assignment::ReplaceRight,
+                (Some(InvoiceState::Data(_)), Some(RGB_STATE_ASSET_OWNER) | None) => {
+                    Assignment::NonFungible
+                }
+                (Some(InvoiceState::Void), Some(RGB_STATE_REPLACE_RIGHT) | None) => {
+                    Assignment::ReplaceRight
+                }
                 (None, None) => Assignment::Any,
                 (_, _) => {
                     return Err(Error::InvalidInvoice {
@@ -711,10 +720,10 @@ impl Invoice {
             },
             Some(AssetSchema::Nia) | Some(AssetSchema::Cfa) => {
                 match (decoded.assignment_state, assignment_name.as_deref()) {
-                    (Some(InvoiceState::Amount(v)), Some("assetOwner") | None) => {
+                    (Some(InvoiceState::Amount(v)), Some(RGB_STATE_ASSET_OWNER) | None) => {
                         Assignment::Fungible(v.value())
                     }
-                    (None, Some("assetOwner") | None) => Assignment::Fungible(0),
+                    (None, Some(RGB_STATE_ASSET_OWNER) | None) => Assignment::Fungible(0),
                     (_, _) => {
                         return Err(Error::InvalidInvoice {
                             details: s!("invalid assignment"),
@@ -724,7 +733,7 @@ impl Invoice {
             }
             Some(AssetSchema::Uda) => {
                 match (decoded.assignment_state, assignment_name.as_deref()) {
-                    (Some(InvoiceState::Data(_)) | None, Some("assetOwner") | None) => {
+                    (Some(InvoiceState::Data(_)) | None, Some(RGB_STATE_ASSET_OWNER) | None) => {
                         Assignment::NonFungible
                     }
                     (_, _) => {
@@ -736,16 +745,16 @@ impl Invoice {
             }
             Some(AssetSchema::Ifa) => {
                 match (decoded.assignment_state, assignment_name.as_deref()) {
-                    (Some(InvoiceState::Amount(v)), Some("assetOwner")) => {
+                    (Some(InvoiceState::Amount(v)), Some(RGB_STATE_ASSET_OWNER)) => {
                         Assignment::Fungible(v.value())
                     }
-                    (None, Some("assetOwner")) => Assignment::Fungible(0),
-                    (Some(InvoiceState::Amount(v)), Some("inflationAllowance")) => {
+                    (None, Some(RGB_STATE_ASSET_OWNER)) => Assignment::Fungible(0),
+                    (Some(InvoiceState::Amount(v)), Some(RGB_STATE_INFLATION_ALLOWANCE)) => {
                         Assignment::InflationRight(v.value())
                     }
-                    (None, Some("inflationAllowance")) => Assignment::InflationRight(0),
+                    (None, Some(RGB_STATE_INFLATION_ALLOWANCE)) => Assignment::InflationRight(0),
                     (Some(InvoiceState::Amount(_)), None) => Assignment::Any,
-                    (Some(InvoiceState::Void), Some("replaceRight") | None) => {
+                    (Some(InvoiceState::Void), Some(RGB_STATE_REPLACE_RIGHT) | None) => {
                         Assignment::ReplaceRight
                     }
                     (None, None) => Assignment::Any,
@@ -1806,7 +1815,7 @@ impl Wallet {
         .expect("invalid spec")
         .add_global_state("terms", terms)
         .expect("invalid terms")
-        .add_global_state("issuedSupply", Amount::from(settled))
+        .add_global_state(RGB_GLOBAL_ISSUED_SUPPLY, Amount::from(settled))
         .expect("invalid issuedSupply");
 
         let mut issue_utxos: HashMap<DbTxo, u64> = HashMap::new();
@@ -1817,7 +1826,7 @@ impl Wallet {
             issue_utxos.insert(utxo.clone(), *amount);
 
             builder = builder
-                .add_fungible_state("assetOwner", self.get_builder_seal(utxo), *amount)
+                .add_fungible_state(RGB_STATE_ASSET_OWNER, self.get_builder_seal(utxo), *amount)
                 .expect("invalid global state data");
         }
         debug!(self.logger, "Issuing on UTXOs: {issue_utxos:?}");
@@ -2014,7 +2023,7 @@ impl Wallet {
         .add_global_state("terms", terms)
         .expect("invalid terms")
         .add_data(
-            "assetOwner",
+            RGB_STATE_ASSET_OWNER,
             self.get_builder_seal(issue_utxo.clone()),
             allocation,
         )
@@ -2188,7 +2197,7 @@ impl Wallet {
         .expect("invalid precision")
         .add_global_state("terms", terms)
         .expect("invalid terms")
-        .add_global_state("issuedSupply", Amount::from(settled))
+        .add_global_state(RGB_GLOBAL_ISSUED_SUPPLY, Amount::from(settled))
         .expect("invalid issuedSupply");
 
         if let Some(details) = &details {
@@ -2205,7 +2214,7 @@ impl Wallet {
             issue_utxos.insert(utxo.clone(), *amount);
 
             builder = builder
-                .add_fungible_state("assetOwner", self.get_builder_seal(utxo), *amount)
+                .add_fungible_state(RGB_STATE_ASSET_OWNER, self.get_builder_seal(utxo), *amount)
                 .expect("invalid global state data");
         }
         debug!(self.logger, "Issuing on UTXOs: {issue_utxos:?}");
@@ -2364,7 +2373,7 @@ impl Wallet {
         .expect("invalid spec")
         .add_global_state("terms", terms)
         .expect("invalid terms")
-        .add_global_state("issuedSupply", Amount::from(settled))
+        .add_global_state(RGB_GLOBAL_ISSUED_SUPPLY, Amount::from(settled))
         .expect("invalid issuedSupply")
         .add_global_state("maxSupply", Amount::from(settled + inflation_amt))
         .expect("invalid maxSupply");
@@ -2377,7 +2386,7 @@ impl Wallet {
             issue_utxos.insert(utxo.clone(), *amount);
 
             builder = builder
-                .add_fungible_state("assetOwner", self.get_builder_seal(utxo), *amount)
+                .add_fungible_state(RGB_STATE_ASSET_OWNER, self.get_builder_seal(utxo), *amount)
                 .expect("invalid global state data");
         }
         debug!(self.logger, "Issuing on UTXOs: {issue_utxos:?}");
@@ -2389,7 +2398,11 @@ impl Wallet {
             inflation_utxos.insert(utxo.clone(), *amount);
 
             builder = builder
-                .add_fungible_state("inflationAllowance", self.get_builder_seal(utxo), *amount)
+                .add_fungible_state(
+                    RGB_STATE_INFLATION_ALLOWANCE,
+                    self.get_builder_seal(utxo),
+                    *amount,
+                )
                 .expect("invalid global state data");
         }
         debug!(
@@ -2404,7 +2417,7 @@ impl Wallet {
             replace_utxos.insert(utxo.clone());
 
             builder = builder
-                .add_rights("replaceRight", self.get_builder_seal(utxo))
+                .add_rights(RGB_STATE_REPLACE_RIGHT, self.get_builder_seal(utxo))
                 .expect("invalid global state data");
         }
         debug!(self.logger, "Assigning replace rights: {replace_utxos:?}");
@@ -2559,25 +2572,26 @@ impl Wallet {
                 Some(AssetSchema::Nia) | Some(AssetSchema::Cfa) | Some(AssetSchema::Ifa) | None,
             ) => {
                 invoice_builder = invoice_builder.set_amount_raw(*amt);
-                invoice_builder = invoice_builder.set_assignment_name("assetOwner");
+                invoice_builder = invoice_builder.set_assignment_name(RGB_STATE_ASSET_OWNER);
                 assignment
             }
             (Assignment::Any, Some(AssetSchema::Nia) | Some(AssetSchema::Cfa)) => {
-                invoice_builder = invoice_builder.set_assignment_name("assetOwner");
+                invoice_builder = invoice_builder.set_assignment_name(RGB_STATE_ASSET_OWNER);
                 Assignment::Fungible(0)
             }
             (Assignment::NonFungible | Assignment::Any, Some(AssetSchema::Uda)) => {
-                invoice_builder = invoice_builder.set_assignment_name("assetOwner");
+                invoice_builder = invoice_builder.set_assignment_name(RGB_STATE_ASSET_OWNER);
                 Assignment::NonFungible
             }
             (Assignment::ReplaceRight, Some(AssetSchema::Ifa)) => {
                 invoice_builder = invoice_builder.set_void();
-                invoice_builder = invoice_builder.set_assignment_name("replaceRight");
+                invoice_builder = invoice_builder.set_assignment_name(RGB_STATE_REPLACE_RIGHT);
                 Assignment::ReplaceRight
             }
             (Assignment::InflationRight(amt), Some(AssetSchema::Ifa)) => {
                 invoice_builder = invoice_builder.set_amount_raw(*amt);
-                invoice_builder = invoice_builder.set_assignment_name("inflationAllowance");
+                invoice_builder =
+                    invoice_builder.set_assignment_name(RGB_STATE_INFLATION_ALLOWANCE);
                 assignment
             }
             (Assignment::Any, _) => Assignment::Any,

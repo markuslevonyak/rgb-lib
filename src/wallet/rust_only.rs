@@ -126,7 +126,7 @@ impl Wallet {
 
         let mut all_transitions: HashMap<ContractId, Transition> = HashMap::new();
         let mut asset_beneficiaries: AssetBeneficiariesMap = bmap![];
-        let assignment_name = FieldName::from("assetOwner");
+        let assignment_name = FieldName::from(RGB_STATE_ASSET_OWNER);
 
         for (contract_id, asset_coloring_info) in coloring_info.asset_info_map.clone() {
             let schema = AssetSchema::get_from_contract_id(contract_id, &runtime)?;

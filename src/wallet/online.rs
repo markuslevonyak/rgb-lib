@@ -2456,26 +2456,29 @@ impl Wallet {
 
                 match recipient.assignment {
                     Assignment::Fungible(amt) => {
-                        asset_transition_builder =
-                            asset_transition_builder.add_fungible_state("assetOwner", seal, amt)?;
+                        asset_transition_builder = asset_transition_builder.add_fungible_state(
+                            RGB_STATE_ASSET_OWNER,
+                            seal,
+                            amt,
+                        )?;
                     }
                     Assignment::NonFungible => {
                         if let AllocatedState::Data(state) = uda_state.clone().unwrap() {
                             asset_transition_builder = asset_transition_builder
-                                .add_data("assetOwner", seal, Allocation::from(state))
+                                .add_data(RGB_STATE_ASSET_OWNER, seal, Allocation::from(state))
                                 .map_err(Error::from)?;
                         }
                     }
                     Assignment::InflationRight(amt) => {
                         asset_transition_builder = asset_transition_builder.add_fungible_state(
-                            "inflationAllowance",
+                            RGB_STATE_INFLATION_ALLOWANCE,
                             seal,
                             amt,
                         )?;
                     }
                     Assignment::ReplaceRight => {
                         asset_transition_builder =
-                            asset_transition_builder.add_rights("replaceRight", seal)?;
+                            asset_transition_builder.add_rights(RGB_STATE_REPLACE_RIGHT, seal)?;
                     }
                     _ => unreachable!(),
                 }
@@ -2494,14 +2497,14 @@ impl Wallet {
                 )?;
                 if change.fungible > 0 {
                     asset_transition_builder = asset_transition_builder.add_fungible_state(
-                        "assetOwner",
+                        RGB_STATE_ASSET_OWNER,
                         seal,
                         change.fungible,
                     )?;
                 }
                 if change.inflation > 0 {
                     asset_transition_builder = asset_transition_builder.add_fungible_state(
-                        "inflationAllowance",
+                        RGB_STATE_INFLATION_ALLOWANCE,
                         seal,
                         change.inflation,
                     )?;
@@ -2509,7 +2512,7 @@ impl Wallet {
                 if change.replace > 0 {
                     for _ in 0..change.replace {
                         asset_transition_builder =
-                            asset_transition_builder.add_rights("replaceRight", seal)?;
+                            asset_transition_builder.add_rights(RGB_STATE_REPLACE_RIGHT, seal)?;
                     }
                 }
             };
