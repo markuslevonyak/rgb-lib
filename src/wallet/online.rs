@@ -109,7 +109,6 @@ impl AssignmentsCollection {
 struct AssetSpend {
     txo_map: HashMap<i32, Outpoint>,
     assignments_collected: AssignmentsCollection,
-    assignments_needed: AssignmentsCollection,
 }
 
 /// The result of a send operation
@@ -151,6 +150,7 @@ struct InfoAssetTransfer {
     recipients: Vec<LocalRecipient>,
     asset_spend: AssetSpend,
     change: AssignmentsCollection,
+    assignments_needed: AssignmentsCollection,
     assignments_spent: TxoAssignments,
 }
 
@@ -2109,7 +2109,7 @@ impl Wallet {
     fn _select_rgb_inputs(
         &self,
         asset_id: String,
-        assignments_needed: AssignmentsCollection,
+        assignments_needed: &AssignmentsCollection,
         unspents: Vec<LocalUnspent>,
     ) -> Result<AssetSpend, Error> {
         // sort unspents by the sum of main amounts
@@ -2210,11 +2210,11 @@ impl Wallet {
             txo_map.insert(unspent.utxo.idx, unspent.utxo.outpoint());
 
             // stop as soon as we have the needed assignments
-            if assignments_collected.enough(&assignments_needed) {
+            if assignments_collected.enough(assignments_needed) {
                 break;
             }
         }
-        if !assignments_collected.enough(&assignments_needed) {
+        if !assignments_collected.enough(assignments_needed) {
             return Err(Error::InsufficientAssignments {
                 asset_id,
                 available: assignments_collected,
@@ -2228,7 +2228,6 @@ impl Wallet {
         Ok(AssetSpend {
             txo_map,
             assignments_collected,
-            assignments_needed,
         })
     }
 
@@ -2417,7 +2416,7 @@ impl Wallet {
                 let should_add_as_input = inputs_added.opout_contributes(
                     &opout,
                     &state,
-                    &transfer_info.asset_spend.assignments_needed,
+                    &transfer_info.assignments_needed,
                 );
                 if !should_add_as_input {
                     extra_state
@@ -2484,7 +2483,7 @@ impl Wallet {
                 }
             }
 
-            let change = inputs_added.change(&transfer_info.asset_spend.assignments_needed);
+            let change = inputs_added.change(&transfer_info.assignments_needed);
 
             if change != AssignmentsCollection::default() {
                 transfer_info.change = change.clone();
@@ -3137,7 +3136,7 @@ impl Wallet {
                 .for_each(|a| a.assignment.add_to_assignments(&mut assignments_needed));
             let asset_spend = self._select_rgb_inputs(
                 asset_id.clone(),
-                assignments_needed,
+                &assignments_needed,
                 input_unspents.clone(),
             )?;
             let transfer_info = InfoAssetTransfer {
@@ -3145,6 +3144,7 @@ impl Wallet {
                 recipients: local_recipients.clone(),
                 asset_spend,
                 change: AssignmentsCollection::default(),
+                assignments_needed,
                 assignments_spent: HashMap::new(),
             };
             transfer_info_map.insert(asset_id.clone(), transfer_info);
